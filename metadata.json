@@ -1,0 +1,14 @@
+{
+  "name": "Digital Agronomist",
+  "description": "A sophisticated, editorial-inspired agricultural assistant providing AI-driven crop recommendations, disease detection, and precision field mapping.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "AI-driven crop analysis",
+    "Real-time weather integration",
+    "Precision field mapping",
+    "Multilingual support (EN/BN)"
+  ]
+}

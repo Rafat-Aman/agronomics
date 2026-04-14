@@ -1,0 +1,62 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hind+Siliguri:wght@400;500;600;700&family=Public+Sans:wght@700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Hind Siliguri", ui-sans-serif, system-ui, sans-serif;
+  --font-headline: "Public Sans", "Hind Siliguri", sans-serif;
+  
+  --color-surface: #f5fced;
+  --color-surface-container-low: #eff6e7;
+  --color-surface-container-high: #e3ebdc;
+  --color-surface-container-lowest: #ffffff;
+  
+  --color-primary: #0d631b;
+  --color-primary-container: #2e7d32;
+  --color-on-primary: #ffffff;
+  
+  --color-secondary: #7a5649;
+  --color-secondary-container: #fdcdbc;
+  
+  --color-tertiary: #6e5100;
+  --color-tertiary-container: #8c6800;
+  
+  --color-on-surface: #171d14;
+  --color-on-surface-variant: #40493d;
+  --color-outline: #707a6c;
+  --color-outline-variant: #bfcaba;
+  
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+}
+
+@layer base {
+  body {
+    @apply bg-surface text-on-surface font-sans antialiased;
+    line-height: 1.6;
+  }
+  
+  /* Bilingual Rule: Increase line-height for Bangla */
+  [lang="bn"] body {
+    line-height: 1.85;
+  }
+}
+
+.editorial-shadow {
+  box-shadow: 0 4px 32px rgba(23, 29, 20, 0.06);
+}
+
+.editorial-shadow-lg {
+  box-shadow: 0 32px 64px -12px rgba(23, 29, 20, 0.06);
+}
+
+.editorial-asymmetry {
+  clip-path: polygon(0 0, 100% 0, 100% 85%, 0% 100%);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
