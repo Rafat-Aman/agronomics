@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, User, Mail, Lock, Phone, MapPin } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
 import { auth, db } from '../lib/firebase';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -69,8 +69,10 @@ export default function Signup() {
         console.warn('[Signup] Firestore write failed, AuthContext will retry:', firestoreErr);
       }
 
-      // 4. Navigate — Firebase Auth state is now set, Dashboard will load
-      navigate('/dashboard');
+      // 4. Navigate to login first, then sign out to avoid race condition
+      navigate('/login', { replace: true });
+      await auth.signOut();
+
     } catch (err: any) {
       const msg: Record<string, string> = {
         'auth/email-already-in-use': 'This email is already registered.',
