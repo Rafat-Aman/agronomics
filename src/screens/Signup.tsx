@@ -53,22 +53,31 @@ export default function Signup() {
       // 2. Update display name in Auth
       await updateProfile(user, { displayName: fullName });
 
-      // 3. Save full farmer profile in Firestore
-      await setDoc(doc(db, 'farmers', user.uid), {
-        uid: user.uid,
-        fullName,
-        email,
-        phone: '+880' + phone,
-        district,
-        createdAt: serverTimestamp(),
-      });
+      // 3. Save farmer profile in Firestore (best-effort)
+      try {
+        await setDoc(doc(db, 'farmers', user.uid), {
+          uid: user.uid,
+          fullName,
+          email,
+          phone: '+880' + phone,
+          district,
+          createdAt: serverTimestamp(),
+        });
+      } catch (firestoreErr) {
+        // Firestore write may fail intermittently on first connection.
+        // AuthContext will create/fetch the profile when the dashboard loads.
+        console.warn('[Signup] Firestore write failed, AuthContext will retry:', firestoreErr);
+      }
 
+      // 4. Navigate — Firebase Auth state is now set, Dashboard will load
       navigate('/dashboard');
     } catch (err: any) {
       const msg: Record<string, string> = {
         'auth/email-already-in-use': 'This email is already registered.',
         'auth/invalid-email': 'Please enter a valid email address.',
         'auth/weak-password': 'Password is too weak. Use at least 6 characters.',
+        'auth/network-request-failed': 'Network error. Check your internet connection.',
+        'auth/too-many-requests': 'Too many attempts. Please wait a moment and try again.',
       };
       setError(msg[err.code] || err.message || 'Signup failed. Please try again.');
     } finally {

@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
@@ -8,16 +8,23 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Debug: log which env vars are present (remove in production)
+const missing = Object.entries(firebaseConfig)
+  .filter(([, v]) => !v)
+  .map(([k]) => k);
 
-// Initialize Auth
+if (missing.length > 0) {
+  console.error('[Firebase] Missing env variables:', missing);
+} else {
+  console.log('[Firebase] All env variables present. Project:', firebaseConfig.projectId);
+}
+
+// Avoid re-initializing on hot reload
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+
 export const auth = getAuth(app);
-
-// Initialize Firestore
 export const db = getFirestore(app);
-
 export default app;
