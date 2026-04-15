@@ -22,15 +22,15 @@ import { motion } from 'motion/react';
 
 export default function Dashboard() {
   const { t } = useApp();
-  const { farmerProfile, loading } = useAuth();
+  const { userProfile, loading } = useAuth();
   const navigate = useNavigate();
 
   // Route protection — must be in an effect, not inline during render
   useEffect(() => {
-    if (!loading && !farmerProfile) {
+    if (!loading && !userProfile) {
       navigate('/login');
     }
-  }, [loading, farmerProfile, navigate]);
+  }, [loading, userProfile, navigate]);
 
   if (loading) {
     return (
@@ -40,7 +40,7 @@ export default function Dashboard() {
     );
   }
 
-  if (!farmerProfile) return null;
+  if (!userProfile) return null;
 
   return (
     <Layout>
@@ -52,7 +52,7 @@ export default function Dashboard() {
               Friday, 24 May
             </p>
             <h2 className="text-4xl font-headline font-bold tracking-tight text-on-surface">
-              {t('welcome')} <span className="text-primary">{farmerProfile?.fullName || 'Farmer'}</span>
+              {t('welcome')} <span className="text-primary">{userProfile?.name || 'Farmer'}</span>
             </h2>
           </div>
 

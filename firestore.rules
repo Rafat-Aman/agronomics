@@ -1,0 +1,175 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────
+    // HELPER FUNCTIONS
+    // ─────────────────────────────────────────────────────────
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Backend service account or Cloud Functions (custom token)
+    function isBackendService() {
+      return request.auth.token.role == 'backend_service';
+    }
+
+    function isValidUserProfile() {
+      let data = request.resource.data;
+      return data.keys().hasAll(['uid', 'name', 'phone', 'role', 'region'])
+        && data.role in ['farmer', 'expert', 'admin']
+        && data.name is string
+        && data.name.size() > 0
+        && data.uid == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // A. USERS  →  users/{userId}
+    // ─────────────────────────────────────────────────────────
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isOwner(userId);
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUserProfile();
+      allow update: if isAuthenticated() && isOwner(userId);
+      allow delete: if false; // Never delete user profiles from client
+
+      // B. USER SETTINGS
+      match /settings/{settingId} {
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
+
+      // C. USER FIELDS  (user manages own)
+      match /fields/{fieldId} {
+        allow read, write: if isAuthenticated() && isOwner(userId);
+      }
+
+      // DETECTIONS — backend writes, user reads
+      match /detections/{detectionId} {
+        allow read: if isAuthenticated() && isOwner(userId);
+        allow create, update: if isBackendService();
+        allow delete: if false;
+      }
+
+      // RECOMMENDATIONS — backend writes, user reads
+      match /recommendations/{recId} {
+        allow read: if isAuthenticated() && isOwner(userId);
+        allow create, update: if isBackendService();
+        allow delete: if false;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // D/E/F. GLOBAL FIELDS  →  fields_global/{fieldId}
+    // ─────────────────────────────────────────────────────────
+    match /fields_global/{fieldId} {
+      allow read: if isAuthenticated();
+      allow write: if isBackendService();
+
+      // D. GPS BOUNDARIES — farmers can write their own
+      match /boundaries/{pointId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated(); // Farmer creates own gps points
+      }
+
+      // E. SNAPSHOTS — backend only (sensor/API data)
+      match /snapshots/{snapshotId} {
+        allow read: if isAuthenticated();
+        allow write: if isBackendService();
+      }
+
+      // F. CROP CYCLES — farmer manages
+      match /crop_cycles/{cycleId} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // AI FEATURE STORE  →  ai_feature_store/{featureId}
+    // ─────────────────────────────────────────────────────────
+    match /ai_feature_store/{featureId} {
+      // Users can read their own features; backend writes
+      allow read: if isAuthenticated()
+        && resource.data.user_id == request.auth.uid;
+      allow write: if isBackendService();
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // AI REQUESTS  →  ai_requests/{requestId}
+    // ─────────────────────────────────────────────────────────
+    match /ai_requests/{requestId} {
+      // Users create and read their own requests
+      allow create: if isAuthenticated()
+        && request.resource.data.user_id == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow read: if isAuthenticated()
+        && resource.data.user_id == request.auth.uid;
+      allow update, delete: if isBackendService();
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // AI RESULTS  →  ai_results/{resultId}
+    // ─────────────────────────────────────────────────────────
+    match /ai_results/{resultId} {
+      allow read: if isAuthenticated();   // Users can read result summaries
+      allow write: if isBackendService(); // Only Cloud Functions write results
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // TRAINING DATASET  →  training_dataset/{dataId}
+    // ─────────────────────────────────────────────────────────
+    match /training_dataset/{dataId} {
+      allow read, write: if isBackendService(); // ML infrastructure only
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // FEEDBACK LOOP  →  prediction_feedback/{feedbackId}
+    // ─────────────────────────────────────────────────────────
+    match /prediction_feedback/{feedbackId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.user_id == request.auth.uid;
+      allow read: if isAuthenticated()
+        && resource.data.user_id == request.auth.uid;
+      allow update, delete: if isBackendService();
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // GLOBAL REFERENCE DATA — Read-only for users
+    // ─────────────────────────────────────────────────────────
+    match /farming_tips/{tipId} {
+      allow read: if isAuthenticated();
+      allow write: if isBackendService();
+    }
+
+    match /market_prices/{priceId} {
+      allow read: if isAuthenticated();
+      allow write: if isBackendService();
+    }
+
+    match /crops_ref/{cropId} {
+      allow read: if isAuthenticated();
+      allow write: if isBackendService();
+    }
+
+    match /diseases_ref/{diseaseId} {
+      allow read: if isAuthenticated();
+      allow write: if isBackendService();
+    }
+
+    match /weather_cache/{regionHash} {
+      allow read: if isAuthenticated();
+      allow write: if isBackendService();
+    }
+
+    // ─────────────────────────────────────────────────────────
+    // DENY ALL OTHER PATHS
+    // ─────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
