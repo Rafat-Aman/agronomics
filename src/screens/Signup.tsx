@@ -1,11 +1,11 @@
+import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, User, Mail, Lock, Phone, MapPin } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useState } from 'react';
-import { createUserWithEmailAndPassword, updateProfile, signOut } from 'firebase/auth';
-import { auth, db } from '../lib/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { auth } from '../lib/firebase';
+import { createUserProfile } from '../lib/db';
 
 const DISTRICTS = [
   'Barisal', 'Chittagong', 'Comilla', 'Dhaka', 'Faridpur',
@@ -55,13 +55,16 @@ export default function Signup() {
 
       // 3. Save farmer profile in Firestore (best-effort)
       try {
-        await setDoc(doc(db, 'farmers', user.uid), {
-          uid: user.uid,
-          fullName,
+        await createUserProfile(user.uid, {
+          name: fullName,
           email,
           phone: '+880' + phone,
-          district,
-          createdAt: serverTimestamp(),
+          role: 'farmer',
+          region: {
+            district,
+            lat: 0,
+            lng: 0
+          }
         });
       } catch (firestoreErr) {
         // Firestore write may fail intermittently on first connection.

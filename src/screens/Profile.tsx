@@ -17,7 +17,7 @@ import { cn } from '../lib/utils';
 
 export default function Profile() {
   const { t, language, setLanguage } = useApp();
-  const { farmerProfile, logout } = useAuth();
+  const { userProfile, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -46,11 +46,11 @@ export default function Profile() {
           
           <div className="space-y-2">
             <h1 className="font-headline font-black text-4xl tracking-tight text-primary">
-              {farmerProfile?.fullName || 'Farmer'}
+              {userProfile?.name || 'Farmer'}
             </h1>
             <div className="flex items-center justify-center gap-2 text-on-surface-variant font-medium">
               <MapPin className="w-4 h-4" />
-              <span className="text-[10px] uppercase tracking-widest">Sylhet, Bangladesh</span>
+              <span className="text-[10px] uppercase tracking-widest">{userProfile?.region?.district || 'Bangladesh'}</span>
             </div>
             <p className="text-on-surface-variant/80 max-w-xs font-sans text-sm leading-relaxed mx-auto">
               Pioneer in advanced organic rice cultivation and sustainable irrigation since 2018.

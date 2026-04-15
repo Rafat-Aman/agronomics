@@ -1,8 +1,8 @@
+import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { useNavigate } from 'react-router-dom';
 import { User, Lock, ArrowRight, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
-import { useState } from 'react';
 import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 
