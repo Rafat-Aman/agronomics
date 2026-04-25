@@ -1,0 +1,52 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ────────────────────────────────────────────────────────────
+    // CROP IMAGES  →  /crop_images/{userId}/{imageId}
+    // Only the image owner can upload; authenticated users can read
+    // (AI backend reads these via service account, not these rules)
+    // ────────────────────────────────────────────────────────────
+    match /crop_images/{userId}/{imageId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 10 * 1024 * 1024  // Max 10 MB
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // DISEASE REPORTS  →  /disease_reports/{userId}/{reportId}
+    // Backend writes; user reads own
+    // ────────────────────────────────────────────────────────────
+    match /disease_reports/{userId}/{reportId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false; // Only Cloud Functions write via Admin SDK
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // FARMING TIPS IMAGES  →  /tips/{tipId}
+    // Public read, backend write
+    // ────────────────────────────────────────────────────────────
+    match /tips/{tipId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // PROFILE PHOTOS  →  /profile_photos/{userId}/avatar.jpg
+    // ────────────────────────────────────────────────────────────
+    match /profile_photos/{userId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Deny all other paths
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

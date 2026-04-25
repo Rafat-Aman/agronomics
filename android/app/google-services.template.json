@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "514116136715",
+    "project_id": "digital-agronomics",
+    "storage_bucket": "digital-agronomics.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:514116136715:android:503c96fb89908bed70fc0e",
+        "android_client_info": {
+          "package_name": "com.digital.agronomist"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "${ANDROID_FIREBASE_API_KEY}"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
