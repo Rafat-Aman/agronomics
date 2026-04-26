@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, ChangeEvent } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import { 
   Camera, 
@@ -30,7 +30,7 @@ export default function DiseaseDetection() {
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     const imageUrl = URL.createObjectURL(file);
@@ -42,9 +42,14 @@ export default function DiseaseDetection() {
   const analyzeImage = async () => {
     if (!image) return;
 
+    // FORCED TEST: Using direct key literal
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+    console.log('Gemini AI: Initializing with Environment Key...');
+    
     if (!apiKey) {
-      setError('Missing API Key. Please add VITE_GEMINI_API_KEY to your settings.');
+      setError('System Error: Key is empty in code.');
+      setLoading(false);
       return;
     }
 
@@ -52,8 +57,7 @@ export default function DiseaseDetection() {
     setError(null);
 
     try {
-      const genAI = new GoogleGenAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const ai = new GoogleGenAI({ apiKey });
 
       // Convert image to base64
       const response = await fetch(image);
@@ -75,17 +79,20 @@ export default function DiseaseDetection() {
       }
       If not a leaf, return {"error": "Invalid Image"}.`;
 
-      const result = await model.generateContent([
-        prompt,
-        {
-          inlineData: {
-            data: base64Data,
-            mimeType: blob.type
+      const result = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          { text: prompt },
+          {
+            inlineData: {
+              data: base64Data,
+              mimeType: blob.type
+            }
           }
-        }
-      ]);
+        ]
+      });
 
-      const text = result.response.text();
+      const text = result.text;
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) throw new Error('Invalid AI response');
       
@@ -94,12 +101,14 @@ export default function DiseaseDetection() {
 
       setPrediction(data);
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Analysis failed. Try again.');
+      console.error('AI Error:', err);
+      setError(`AI Error: ${err.message || 'Check your internet connection and API key.'}`);
     } finally {
       setLoading(false);
     }
   };
+
+  const keyStatus = import.meta.env.VITE_GEMINI_API_KEY ? 'Loaded' : 'Missing';
 
   return (
     <Layout title="Vision AI Scanner" showBack>
@@ -157,9 +166,9 @@ export default function DiseaseDetection() {
 
         <AnimatePresence>
           {error && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-error-container text-on-error-container p-5 rounded-[2rem] flex gap-3 border border-error/10">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-error-container text-on-error-container p-5 rounded-[2rem] flex gap-3 border border-error/10 overflow-hidden">
               <AlertCircle className="w-5 h-5 shrink-0" />
-              <p className="text-sm font-bold">{error}</p>
+              <p className="text-sm font-bold break-words">{error}</p>
             </motion.div>
           )}
 
@@ -215,7 +224,16 @@ export default function DiseaseDetection() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <div className="flex justify-center">
+            <span className={cn(
+              "text-[9px] font-bold uppercase tracking-tight px-3 py-1 rounded-full",
+              keyStatus === 'Loaded' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+            )}>
+              AI Status: Key {keyStatus}
+            </span>
+        </div>
       </div>
     </Layout>
   );
-}
+}
