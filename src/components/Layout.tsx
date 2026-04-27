@@ -17,9 +17,10 @@ interface LayoutProps {
   showBack?: boolean;
   title?: string;
   hideNav?: boolean;
+  hideLangToggle?: boolean;
 }
 
-export default function Layout({ children, showBack, title, hideNav }: LayoutProps) {
+export default function Layout({ children, showBack, title, hideNav, hideLangToggle }: LayoutProps) {
   const { language, setLanguage, t } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
@@ -52,12 +53,14 @@ export default function Layout({ children, showBack, title, hideNav }: LayoutPro
           </div>
         </div>
         
-        <button 
-          onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
-          className="bg-primary/10 px-4 py-1.5 rounded-full font-headline font-bold text-sm text-primary hover:bg-primary/20 transition-all"
-        >
-          {language === 'en' ? 'BN' : 'EN'}
-        </button>
+        {!hideLangToggle && (
+          <button 
+            onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
+            className="bg-primary/10 px-4 py-1.5 rounded-full font-headline font-bold text-sm text-primary hover:bg-primary/20 transition-all"
+          >
+            {language === 'en' ? 'BN' : 'EN'}
+          </button>
+        )}
       </header>
 
       <main className={cn("flex-grow pt-20", !hideNav && "pb-32")}>
