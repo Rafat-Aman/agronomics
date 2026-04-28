@@ -250,17 +250,17 @@ export default function Dashboard() {
           {fieldsLoading && (
             <div className="flex items-center gap-2 text-on-surface-variant py-3">
               <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              <span className="text-sm">Loading fields…</span>
+              <span className="text-sm">{t('loadingFields')}</span>
             </div>
           )}
 
           {!fieldsLoading && fields.length === 0 && (
             <div className="bg-surface-container-low rounded-[1.5rem] p-6 text-center border border-outline-variant/20 space-y-3">
               <MapIcon className="w-10 h-10 mx-auto text-primary/30" />
-              <p className="font-bold text-on-surface-variant">No fields mapped yet</p>
+              <p className="font-bold text-on-surface-variant">{t('noFieldsMapped')}</p>
               <button onClick={() => navigate('/fields')}
                 className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
-                <Plus className="w-4 h-4" /> Add First Field
+                <Plus className="w-4 h-4" /> {t('addFirstField')}
               </button>
             </div>
           )}
@@ -274,7 +274,7 @@ export default function Dashboard() {
                   <div>
                     <h4 className="font-bold text-lg">{field.field_name}</h4>
                     <p className="text-primary font-medium text-sm">
-                      {field.area_size} {field.area_unit} · {field.input_mode === 'polygon' ? 'GPS Mapped' : 'Simple'}
+                      {field.area_size} {field.area_unit} · {field.input_mode === 'polygon' ? t('gpsMapped') : t('simpleMode')}
                     </p>
                   </div>
                   <span className={cn(
@@ -284,10 +284,10 @@ export default function Dashboard() {
                     : field.health_status === 'critical' ? 'bg-red-100 text-red-700'
                     : 'bg-surface-container text-on-surface-variant'
                   )}>
-                    {field.health_status === 'healthy' ? 'Healthy'
-                      : field.health_status === 'attention_needed' ? 'Attention'
-                      : field.health_status === 'critical' ? 'Critical'
-                      : 'Unknown'}
+                    {field.health_status === 'healthy' ? t('statusHealthy')
+                      : field.health_status === 'attention_needed' ? t('statusAttention')
+                      : field.health_status === 'critical' ? t('statusCritical')
+                      : t('statusUnknown')}
                   </span>
                 </div>
                 {field.active_crop && (
@@ -310,42 +310,42 @@ export default function Dashboard() {
               {
                 icon: Sprout,
                 label: t('cropSelection'),
-                desc: 'AI Recommendations',
+                desc: t('aiRecommendations'),
                 color: 'text-primary',
                 path: '/tools/crops',
               },
               {
                 icon: ScanLine,
                 label: t('diseaseDetection'),
-                desc: 'Scan Crop',
+                desc: t('scanCropDesc'),
                 color: 'text-red-500',
                 path: '/tools/scan',
               },
               {
                 icon: MapIcon,
                 label: t('fieldMapping'),
-                desc: 'Satellite Analysis',
+                desc: t('satelliteAnalysis'),
                 color: 'text-secondary',
                 path: '/fields',
               },
               {
                 icon: Lightbulb,
                 label: t('farmingTips'),
-                desc: 'Best Practices',
+                desc: t('bestPracticesDesc'),
                 color: 'text-tertiary',
                 path: '/tools',
               },
               {
                 icon: CloudSun,
-                label: language === 'bn' ? 'আবহাওয়া পূর্বাভাস' : 'Weather Forecast',
-                desc: '7-Day Farming Outlook',
+                label: t('weatherForecast'),
+                desc: t('sevenDayOutlook'),
                 color: 'text-sky-500',
                 path: '/weather',
               },
               {
                 icon: Mic,
-                label: language === 'bn' ? 'ভয়েস সহকারী' : 'Voice Assistant',
-                desc: language === 'bn' ? 'বাংলা ও ইংরেজি' : 'Bangla & English AI',
+                label: t('voiceAssistant'),
+                desc: t('banglaEnglishAI'),
                 color: 'text-purple-500',
                 path: '/voice',
               },

@@ -13,8 +13,10 @@ import type { Field } from '../types';
 
 interface WeatherData { temp: number; humidity: number; description: string; city: string; }
 
-const SOIL_TYPES = ['Clay', 'Sandy', 'Loamy', 'Silty', 'Peaty', 'Chalky', 'Mixed'];
-const FERTILITY = ['Low', 'Medium', 'High'];
+const SOIL_TYPES_BN = ['কাদামাটি', 'বালুমাটি', 'দোআঁশ', 'পলিমাটি', 'পিটমাটি', 'চুনাপাথরযুক্ত', 'মিশ্র'];
+const SOIL_TYPES_EN = ['Clay', 'Sandy', 'Loamy', 'Silty', 'Peaty', 'Chalky', 'Mixed'];
+const FERTILITY_BN = ['কম', 'মাঝারি', 'বেশি'];
+const FERTILITY_EN = ['Low', 'Medium', 'High'];
 const inputCls = 'w-full bg-surface-container-lowest rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 border border-outline-variant/20';
 
 function CropCard({ crop, idx, onClick }: { crop: CropRecResult; idx: number; onClick?: () => void }) {
@@ -69,6 +71,8 @@ export default function CropRecommendation() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const uid = currentUser?.uid ?? '';
+  const SOIL_TYPES = SOIL_TYPES_BN;
+  const FERTILITY = FERTILITY_BN;
 
   const [tab, setTab] = useState<'new' | 'history'>('new');
   const [fields, setFields] = useState<Field[]>([]);
@@ -239,7 +243,7 @@ Return ONLY valid JSON (no markdown):
             <button key={t2} onClick={() => setTab(t2)}
               className={cn('flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all',
                 tab === t2 ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant')}>
-              {t2 === 'new' ? <><Plus className="w-4 h-4" />New</> : <><History className="w-4 h-4" />History</>}
+              {t2 === 'new' ? <><Plus className="w-4 h-4" />{t('newRecommendation')}</> : <><History className="w-4 h-4" />{t('historyTab')}</>}
             </button>
           ))}
         </div>
@@ -251,12 +255,12 @@ Return ONLY valid JSON (no markdown):
 
               {/* Field Selector */}
               <div className="bg-surface-container-lowest rounded-[2rem] p-5 border border-outline-variant/10 shadow-sm space-y-3">
-                <h3 className="font-black text-base flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" />Select Field (optional)</h3>
+                <h3 className="font-black text-base flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" />{t('selectField')}</h3>
                 <div className="relative">
                   <button onClick={() => setFieldOpen(o => !o)}
                     className="w-full bg-surface-container-low rounded-xl px-4 py-3 text-sm font-bold text-left flex items-center justify-between border border-outline-variant/20">
                     <span className={selectedField ? 'text-on-surface' : 'text-on-surface-variant'}>
-                      {selectedField ? `${selectedField.field_name} · ${selectedField.area_size} ${selectedField.area_unit}` : 'No field selected (use device location)'}
+                      {selectedField ? `${selectedField.field_name} · ${selectedField.area_size} ${selectedField.area_unit}` : t('noFieldSelected')}
                     </span>
                     <ChevronDown className={cn('w-4 h-4 transition-transform', fieldOpen && 'rotate-180')} />
                   </button>
@@ -264,9 +268,9 @@ Return ONLY valid JSON (no markdown):
                     <div className="absolute z-20 mt-1 w-full bg-surface-container-lowest rounded-2xl shadow-xl border border-outline-variant/20 overflow-hidden">
                       <button onClick={() => { setSelectedField(null); setFieldOpen(false); }}
                         className="w-full px-4 py-3 text-sm text-left text-on-surface-variant hover:bg-surface-container-low transition-colors">
-                        None (use device location)
+                        {t('noneDeviceLocation')}
                       </button>
-                      {fields.length === 0 && <p className="px-4 py-3 text-sm text-on-surface-variant">No saved fields. Add fields in the Fields tab.</p>}
+                      {fields.length === 0 && <p className="px-4 py-3 text-sm text-on-surface-variant">{t('noSavedFields')}</p>}
                       {fields.map(f => (
                         <button key={f.field_id} onClick={() => { setSelectedField(f); setFieldOpen(false); }}
                           className="w-full px-4 py-3 text-sm text-left hover:bg-surface-container-low transition-colors border-t border-outline-variant/10">
@@ -282,7 +286,7 @@ Return ONLY valid JSON (no markdown):
               {/* Weather Badge */}
               <div className="bg-surface-container-low p-4 rounded-2xl flex items-center justify-between border border-outline-variant/30">
                 {weatherLoading ? (
-                  <div className="flex items-center gap-2 text-on-surface-variant"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-xs font-bold uppercase">Fetching weather…</span></div>
+                  <div className="flex items-center gap-2 text-on-surface-variant"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-xs font-bold uppercase">{t('fetchingWeather')}</span></div>
                 ) : weather ? (
                   <>
                     <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /><span className="font-bold text-sm">{weather.city}</span></div>
@@ -292,24 +296,24 @@ Return ONLY valid JSON (no markdown):
                     </div>
                   </>
                 ) : (
-                  <span className="text-xs font-bold text-on-surface-variant uppercase">Weather unavailable</span>
+                  <span className="text-xs font-bold text-on-surface-variant uppercase">{t('weatherUnavailable')}</span>
                 )}
               </div>
 
               {/* Soil Form */}
               <div className="bg-white rounded-[2rem] p-6 shadow-xl border border-white/50 space-y-5">
-                <h3 className="font-black text-lg flex items-center gap-2"><Leaf className="w-5 h-5 text-primary" />Soil Data</h3>
+                <h3 className="font-black text-lg flex items-center gap-2"><Leaf className="w-5 h-5 text-primary" />{t('soilData')}</h3>
 
                 {/* Soil Type + Fertility */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">Soil Type</label>
+                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">{t('soilTypeLabel')}</label>
                     <select value={soilType} onChange={e => setSoilType(e.target.value)} className={inputCls}>
                       {SOIL_TYPES.map(s => <option key={s}>{s}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">Fertility</label>
+                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">{t('fertilityLabel')}</label>
                     <select value={fertility} onChange={e => setFertility(e.target.value)} className={inputCls}>
                       {FERTILITY.map(f => <option key={f}>{f}</option>)}
                     </select>
@@ -319,23 +323,23 @@ Return ONLY valid JSON (no markdown):
                 {/* pH + Moisture */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">pH Level</label>
-                    <input type="number" step="0.1" min="0" max="14" value={ph} onChange={e => setPh(e.target.value)} placeholder="e.g. 6.5" className={inputCls} />
+                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">{t('phLevelLabel')}</label>
+                    <input type="number" step="0.1" min="0" max="14" value={ph} onChange={e => setPh(e.target.value)} placeholder="যেমন: 6.5" className={inputCls} />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">Moisture %</label>
-                    <input type="number" value={moisture} onChange={e => setMoisture(e.target.value)} placeholder="e.g. 65" className={inputCls} />
+                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">{t('moisturePct')}</label>
+                    <input type="number" value={moisture} onChange={e => setMoisture(e.target.value)} placeholder="যেমন: 65" className={inputCls} />
                   </div>
                 </div>
 
                 {/* NPK */}
                 <div>
-                  <p className="text-[10px] font-bold uppercase text-on-surface-variant mb-2">NPK Values (mg/kg) *</p>
+                  <p className="text-[10px] font-bold uppercase text-on-surface-variant mb-2">{t('npkValues')}</p>
                   <div className="grid grid-cols-3 gap-3">
                     {[['N', n, setN], ['P', p, setP], ['K', k, setK]].map(([label, val, set]) => (
                       <div key={label as string} className="space-y-1">
                         <label className="text-[10px] font-bold uppercase text-on-surface-variant">{label as string}</label>
-                        <input type="number" value={val as string} onChange={e => (set as any)(e.target.value)} placeholder="e.g. 45" className={inputCls} />
+                        <input type="number" value={val as string} onChange={e => (set as any)(e.target.value)} placeholder="যেমন: 45" className={inputCls} />
                       </div>
                     ))}
                   </div>
@@ -344,7 +348,7 @@ Return ONLY valid JSON (no markdown):
                 <button onClick={getRecommendation} disabled={loading || !n || !p || !k}
                   className="w-full bg-primary text-on-primary py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform">
                   {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
-                  {loading ? 'Analyzing…' : saving ? 'Saving…' : 'Get AI Recommendations'}
+                  {loading ? t('analyzing') : saving ? t('savingLabel') : t('getRecommendations')}
                 </button>
               </div>
 
@@ -361,12 +365,12 @@ Return ONLY valid JSON (no markdown):
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                   <section className="bg-tertiary text-on-primary rounded-[2rem] p-6">
                     <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
-                      <CloudLightning className="w-5 h-5 fill-current" />AI Insight
+                      <CloudLightning className="w-5 h-5 fill-current" />{t('aiInsight')}
                     </h3>
                     <p className="text-on-primary/90 text-sm leading-relaxed">{prediction.summary}</p>
                   </section>
                   <div className="space-y-4">
-                    <h3 className="font-black text-xl px-2">Top {prediction.results.length} Recommendations</h3>
+                    <h3 className="font-black text-xl px-2">{t('topRecommendations')}</h3>
                     {(prediction.results as CropRecResult[]).map((crop: CropRecResult, idx: number) => (
                       <div key={idx}>
                         <CropCard crop={crop} idx={idx}
@@ -374,7 +378,7 @@ Return ONLY valid JSON (no markdown):
                       </div>
                     ))}
                   </div>
-                  <p className="text-center text-xs text-on-surface-variant">✓ Saved to your recommendation history</p>
+                  <p className="text-center text-xs text-on-surface-variant">{t('savedToHistory')}</p>
                 </motion.div>
               )}
             </motion.div>
@@ -386,9 +390,9 @@ Return ONLY valid JSON (no markdown):
               {!historyLoading && history.length === 0 && (
                 <div className="text-center py-16 text-on-surface-variant">
                   <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  <p className="font-bold">No recommendations yet</p>
-                  <p className="text-sm mt-1">Generate your first crop recommendation.</p>
-                  <button onClick={() => setTab('new')} className="mt-4 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm">Get Started</button>
+                  <p className="font-bold">{t('noRecommendations')}</p>
+                  <p className="text-sm mt-1">{t('generateFirst')}</p>
+                  <button onClick={() => setTab('new')} className="mt-4 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm">{t('getStartedBtn')}</button>
                 </div>
               )}
               {history.map(entry => (
