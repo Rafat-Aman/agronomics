@@ -142,6 +142,16 @@ export default function VoiceAssistant() {
     }]);
     setIsThinking(true);
 
+    // ── Prime speech synthesis SYNCHRONOUSLY before any await ──────────────
+    // Chrome drops the user-gesture context after the first await, so we must
+    // activate the synthesizer here (while still in the gesture call stack).
+    if (!isMuted) {
+      window.speechSynthesis.cancel();
+      const primer = new SpeechSynthesisUtterance('');
+      primer.volume = 0;
+      window.speechSynthesis.speak(primer);
+    }
+
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
       setMessages((prev) => [...prev, {
@@ -183,7 +193,8 @@ export default function VoiceAssistant() {
     } finally {
       setIsThinking(false);
     }
-  }, [isThinking, isBn, voiceLang, speakText]);
+  }, [isThinking, isBn, isMuted, voiceLang, speakText]);
+
 
   // ── Speech Recognition ────────────────────────────────────────────────────
   const startListening = useCallback(() => {

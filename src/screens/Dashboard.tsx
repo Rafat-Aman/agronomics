@@ -3,6 +3,8 @@ import { useAuth } from '../AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
+import { getUserFields } from '../lib/db';
+import type { Field } from '../types';
 import {
   CloudRain,
   Wind,
@@ -170,8 +172,19 @@ function DailyGuide() {
 
 export default function Dashboard() {
   const { t, language } = useApp();
-  const { userProfile, loading } = useAuth();
+  const { userProfile, currentUser, loading } = useAuth();
   const navigate = useNavigate();
+  const [fields, setFields] = useState<Field[]>([]);
+  const [fieldsLoading, setFieldsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    setFieldsLoading(true);
+    getUserFields(currentUser.uid)
+      .then(setFields)
+      .catch(console.error)
+      .finally(() => setFieldsLoading(false));
+  }, [currentUser?.uid]);
 
   useEffect(() => {
     if (!loading && !userProfile) {
@@ -229,69 +242,59 @@ export default function Dashboard() {
             <h3 className="text-2xl font-headline font-bold text-on-surface">
               {t('myFields')}
             </h3>
-
-            <button className="text-primary font-bold text-sm flex items-center gap-1">
+            <button onClick={() => navigate('/fields')} className="text-primary font-bold text-sm flex items-center gap-1">
               {t('seeAll')} <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
+          {fieldsLoading && (
+            <div className="flex items-center gap-2 text-on-surface-variant py-3">
+              <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              <span className="text-sm">{t('loadingFields')}</span>
+            </div>
+          )}
+
+          {!fieldsLoading && fields.length === 0 && (
+            <div className="bg-surface-container-low rounded-[1.5rem] p-6 text-center border border-outline-variant/20 space-y-3">
+              <MapIcon className="w-10 h-10 mx-auto text-primary/30" />
+              <p className="font-bold text-on-surface-variant">{t('noFieldsMapped')}</p>
+              <button onClick={() => navigate('/fields')}
+                className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
+                <Plus className="w-4 h-4" /> {t('addFirstField')}
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4">
-            <div className="bg-surface-container-low rounded-[1.5rem] p-5 space-y-4 border border-outline-variant/20">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-bold text-lg">Field A</h4>
-                  <p className="text-primary font-medium text-sm">
-                    Rice (BR-28)
-                  </p>
+            {fields.slice(0, 3).map((field) => (
+              <div key={field.field_id}
+                onClick={() => navigate('/fields')}
+                className="bg-surface-container-low rounded-[1.5rem] p-5 space-y-4 border border-outline-variant/20 cursor-pointer hover:border-primary/30 transition-all">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-bold text-lg">{field.field_name}</h4>
+                    <p className="text-primary font-medium text-sm">
+                      {field.area_size} {field.area_unit} · {field.input_mode === 'polygon' ? t('gpsMapped') : t('simpleMode')}
+                    </p>
+                  </div>
+                  <span className={cn(
+                    'px-2 py-1 rounded-md text-[10px] font-bold uppercase',
+                    field.health_status === 'healthy' ? 'bg-primary-container text-on-primary'
+                    : field.health_status === 'attention_needed' ? 'bg-amber-100 text-amber-800'
+                    : field.health_status === 'critical' ? 'bg-red-100 text-red-700'
+                    : 'bg-surface-container text-on-surface-variant'
+                  )}>
+                    {field.health_status === 'healthy' ? t('statusHealthy')
+                      : field.health_status === 'attention_needed' ? t('statusAttention')
+                      : field.health_status === 'critical' ? t('statusCritical')
+                      : t('statusUnknown')}
+                  </span>
                 </div>
-
-                <span className="px-2 py-1 bg-primary-container text-on-primary rounded-md text-[10px] font-bold">
-                  HEALTHY
-                </span>
+                {field.active_crop && (
+                  <p className="text-sm text-secondary font-medium">{field.active_crop}</p>
+                )}
               </div>
-
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-[10px] font-bold text-on-surface-variant uppercase">
-                  <span>Growth Stage</span>
-                  <span>65%</span>
-                </div>
-
-                <div className="h-2 w-full bg-outline-variant/30 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full w-[65%]" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-surface-container-low rounded-[1.5rem] p-5 space-y-4 border border-outline-variant/20">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-bold text-lg">Field B</h4>
-                  <p className="text-secondary font-medium text-sm">
-                    Potato (Diamond)
-                  </p>
-                </div>
-
-                <span className="px-2 py-1 bg-red-100 text-red-700 rounded-md text-[10px] font-bold uppercase">
-                  Needs Water
-                </span>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-[10px] font-bold text-on-surface-variant uppercase">
-                  <span>Growth Stage</span>
-                  <span>40%</span>
-                </div>
-
-                <div className="h-2 w-full bg-outline-variant/30 rounded-full overflow-hidden">
-                  <div className="h-full bg-secondary rounded-full w-[40%]" />
-                </div>
-
-              </div>
-              <div className="flex items-center gap-2 text-xs text-red-600 font-bold">
-                <AlertCircle className="w-4 h-4" />
-                <span>Low soil moisture</span>
-              </div>
-            </div>
+            ))}
           </div>
         </section>
 
@@ -307,42 +310,42 @@ export default function Dashboard() {
               {
                 icon: Sprout,
                 label: t('cropSelection'),
-                desc: 'AI Recommendations',
+                desc: t('aiRecommendations'),
                 color: 'text-primary',
                 path: '/tools/crops',
               },
               {
                 icon: ScanLine,
                 label: t('diseaseDetection'),
-                desc: 'Scan Crop',
+                desc: t('scanCropDesc'),
                 color: 'text-red-500',
                 path: '/tools/scan',
               },
               {
                 icon: MapIcon,
                 label: t('fieldMapping'),
-                desc: 'Satellite Analysis',
+                desc: t('satelliteAnalysis'),
                 color: 'text-secondary',
                 path: '/fields',
               },
               {
                 icon: Lightbulb,
                 label: t('farmingTips'),
-                desc: 'Best Practices',
+                desc: t('bestPracticesDesc'),
                 color: 'text-tertiary',
                 path: '/tools',
               },
               {
                 icon: CloudSun,
-                label: language === 'bn' ? 'আবহাওয়া পূর্বাভাস' : 'Weather Forecast',
-                desc: '7-Day Farming Outlook',
+                label: t('weatherForecast'),
+                desc: t('sevenDayOutlook'),
                 color: 'text-sky-500',
                 path: '/weather',
               },
               {
                 icon: Mic,
-                label: language === 'bn' ? 'ভয়েস সহকারী' : 'Voice Assistant',
-                desc: language === 'bn' ? 'বাংলা ও ইংরেজি' : 'Bangla & English AI',
+                label: t('voiceAssistant'),
+                desc: t('banglaEnglishAI'),
                 color: 'text-purple-500',
                 path: '/voice',
               },

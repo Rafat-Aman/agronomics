@@ -1,7 +1,10 @@
 import { useApp } from '../AppContext';
 import { useAuth } from '../AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
+import { getUserFields } from '../lib/db';
+import type { Field } from '../types';
 import { 
   User, 
   MapPin, 
@@ -17,8 +20,23 @@ import { cn } from '../lib/utils';
 
 export default function Profile() {
   const { t, language, setLanguage } = useApp();
-  const { userProfile, logout } = useAuth();
+  const { userProfile, currentUser, logout } = useAuth();
   const navigate = useNavigate();
+  const [fields, setFields] = useState<Field[]>([]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    getUserFields(currentUser.uid).then(setFields).catch(console.error);
+  }, [currentUser?.uid]);
+
+  // Compute total area in hectares
+  const totalHa = fields.reduce((sum, f) => {
+    const size = f.area_size || 0;
+    if (f.area_unit === 'hectares') return sum + size;
+    if (f.area_unit === 'acres') return sum + size * 0.404686;
+    if (f.area_unit === 'bigha') return sum + size * 0.13378;
+    return sum + size;
+  }, 0);
 
   const handleLogout = async () => {
     await logout();
@@ -52,26 +70,27 @@ export default function Profile() {
               <MapPin className="w-4 h-4" />
               <span className="text-[10px] uppercase tracking-widest">{userProfile?.region?.district || 'Bangladesh'}</span>
             </div>
-            <p className="text-on-surface-variant/80 max-w-xs font-sans text-sm leading-relaxed mx-auto">
-              Pioneer in advanced organic rice cultivation and sustainable irrigation since 2018.
-            </p>
           </div>
         </section>
 
         {/* Stats Bento */}
         <section className="grid grid-cols-2 gap-4">
           <div className="bg-surface-container-lowest p-6 rounded-3xl editorial-shadow border-t-4 border-primary">
-            <p className="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant/40 mb-4">Ownership</p>
+            <p className="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant/40 mb-4">{t('totalArea')}</p>
             <div className="space-y-1">
-              <span className="font-headline font-black text-4xl text-on-surface tracking-tighter">12.5</span>
-              <span className="font-sans font-bold text-primary block text-xs">Hectares</span>
+              <span className="font-headline font-black text-4xl text-on-surface tracking-tighter">
+                {totalHa > 0 ? totalHa.toFixed(1) : '—'}
+              </span>
+              <span className="font-sans font-bold text-primary block text-xs">{t('area')}</span>
             </div>
           </div>
           <div className="bg-surface-container-low p-6 rounded-3xl">
-            <p className="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant/40 mb-4">Digitalized</p>
+            <p className="text-[10px] font-black uppercase tracking-tighter text-on-surface-variant/40 mb-4">{t('myFields')}</p>
             <div className="space-y-1">
-              <span className="font-headline font-black text-4xl text-on-surface tracking-tighter">08</span>
-              <span className="font-sans font-bold text-tertiary block text-xs">Active Fields</span>
+              <span className="font-headline font-black text-4xl text-on-surface tracking-tighter">
+                {String(fields.length).padStart(2, '0')}
+              </span>
+              <span className="font-sans font-bold text-tertiary block text-xs">{t('activeFieldsLabel')}</span>
             </div>
           </div>
         </section>
@@ -79,14 +98,14 @@ export default function Profile() {
         {/* Menu */}
         <section className="space-y-4">
           <h2 className="font-headline font-bold text-xl mb-6 flex items-center gap-3">
-            Account Management
+            {t('accountManagement')}
             <span className="h-[2px] flex-1 bg-surface-container-high" />
           </h2>
           
           <div className="space-y-3">
             {[
-              { icon: MapIcon, label: t('myLand'), desc: 'Manage health & boundaries' },
-              { icon: Sprout, label: 'My Crops', desc: 'Yield tracking & pest control' },
+              { icon: MapIcon, label: t('myLand'), desc: t('manageLandBoundaries') },
+              { icon: Sprout, label: t('myCrops'), desc: t('yieldTracking') },
             ].map((item, i) => (
               <button key={i} className="w-full group flex items-center justify-between p-5 rounded-2xl bg-surface-container-low hover:bg-surface-container transition-all">
                 <div className="flex items-center gap-4 text-left">
@@ -111,8 +130,8 @@ export default function Profile() {
                   <Languages className="w-6 h-6" />
                 </div>
                 <div>
-                  <span className="block font-bold text-on-surface">Language Settings</span>
-                  <span className="text-xs text-on-surface-variant">Switch between English and Bangla</span>
+                  <span className="block font-bold text-on-surface">{t('languageSettings')}</span>
+                  <span className="text-xs text-on-surface-variant">{t('switchLanguage')}</span>
                 </div>
               </div>
               <span className="font-black text-[10px] bg-outline-variant/30 px-2 py-1 rounded uppercase">
@@ -126,8 +145,8 @@ export default function Profile() {
                   <Settings className="w-6 h-6" />
                 </div>
                 <div>
-                  <span className="block font-bold text-on-surface">App Settings</span>
-                  <span className="text-xs text-on-surface-variant">Notifications & Privacy</span>
+                  <span className="block font-bold text-on-surface">{t('appSettings')}</span>
+                  <span className="text-xs text-on-surface-variant">{t('notificationsPrivacy')}</span>
                 </div>
               </div>
               <ChevronRight className="w-5 h-5 text-on-surface-variant opacity-40" />
