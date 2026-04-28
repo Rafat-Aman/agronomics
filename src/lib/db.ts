@@ -208,6 +208,76 @@ export function subscribeToUserFields(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CROP RECOMMENDATION HISTORY  →  users/{uid}/crop_rec_history/{id}
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CropRecResult {
+  cropName: string;
+  suitability: number;
+  reasons: string[];
+  growingSeason: string;
+  expectedYield: string;
+  estimatedProfit: string;
+  riskLevel: string;
+  demand: string;
+}
+
+export interface CropRecHistoryEntry {
+  id?: string;
+  field_id: string;
+  field_name: string;
+  field_area: string;
+  soil: {
+    type: string;
+    ph: string;
+    n: string;
+    p: string;
+    k: string;
+    moisture: string;
+    fertility: string;
+  };
+  weather: {
+    temp: number;
+    humidity: number;
+    description: string;
+    city: string;
+  } | null;
+  results: CropRecResult[];
+  summary: string;
+  generated_at: any;
+}
+
+/** Save a new recommendation result to the user's history */
+export async function saveCropRecommendationResult(
+  userId: string,
+  entry: Omit<CropRecHistoryEntry, 'id' | 'generated_at'>
+): Promise<string> {
+  const colRef = collection(db, `users/${userId}/crop_rec_history`);
+  const docRef = await addDoc(colRef, { ...entry, generated_at: serverTimestamp() });
+  return docRef.id;
+}
+
+/** Load the N most recent recommendation results for a user */
+export async function getCropRecommendationHistory(
+  userId: string,
+  count: number = 10
+): Promise<CropRecHistoryEntry[]> {
+  const colRef = collection(db, `users/${userId}/crop_rec_history`);
+  const q = query(colRef, orderBy('generated_at', 'desc'), limit(count));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as CropRecHistoryEntry));
+}
+
+/** Delete a recommendation history entry */
+export async function deleteCropRecommendationResult(
+  userId: string,
+  entryId: string
+): Promise<void> {
+  await deleteDoc(doc(db, `users/${userId}/crop_rec_history/${entryId}`));
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GPS BOUNDARIES  →  fields_global/{fid}/boundaries/{point_id}
 // ─────────────────────────────────────────────────────────────────────────────
 

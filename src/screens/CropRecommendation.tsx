@@ -1,345 +1,437 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../AppContext';
+import { useAuth } from '../AuthContext';
 import Layout from '../components/Layout';
 import { GoogleGenAI } from '@google/genai';
-import {
-  TrendingUp,
-  ShieldCheck,
-  CloudLightning,
-  Leaf,
-  Loader2,
-  AlertCircle,
-  MapPin,
-  Thermometer,
-  Droplets
-} from 'lucide-react';
+import { TrendingUp, ShieldCheck, CloudLightning, Leaf, Loader2, AlertCircle, MapPin, Thermometer, Droplets, History, Plus, ChevronDown, Trash2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { getUserFields, saveCropRecommendationResult, getCropRecommendationHistory, deleteCropRecommendationResult } from '../lib/db';
+import type { CropRecResult, CropRecHistoryEntry } from '../lib/db';
+import type { Field } from '../types';
 
-interface CropRecommendation {
-  cropName: string;
-  suitability: number;
-  expectedYield: string;
-  estimatedProfit: string;
-  riskLevel: string;
-  demand: string;
-}
+interface WeatherData { temp: number; humidity: number; description: string; city: string; }
 
-interface PredictionResult {
-  recommendations: CropRecommendation[];
-  weatherImpact: string;
-}
+const SOIL_TYPES = ['Clay', 'Sandy', 'Loamy', 'Silty', 'Peaty', 'Chalky', 'Mixed'];
+const FERTILITY = ['Low', 'Medium', 'High'];
+const inputCls = 'w-full bg-surface-container-lowest rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 border border-outline-variant/20';
 
-interface WeatherData {
-  temp: number;
-  humidity: number;
-  description: string;
-  city: string;
+function CropCard({ crop, idx, onClick }: { crop: CropRecResult; idx: number; onClick?: () => void }) {
+  return (
+    <motion.div onClick={onClick} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: idx * 0.1 }}
+      className="bg-surface-container-lowest rounded-[2rem] p-6 shadow-lg border border-outline-variant/10 relative overflow-hidden cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all">
+      <div className="absolute top-0 right-0 bg-primary text-on-primary px-4 py-2 rounded-bl-3xl font-black text-lg shadow-md">#{idx + 1}</div>
+      <div className="pr-12">
+        <h3 className="text-2xl font-black mb-1">{crop.cropName}</h3>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="h-2 w-24 bg-surface-container-high rounded-full overflow-hidden">
+            <div className="h-full bg-primary" style={{ width: `${crop.suitability}%` }} />
+          </div>
+          <span className="text-xs font-bold text-primary">{crop.suitability}% Match</span>
+        </div>
+        {crop.growingSeason && <p className="text-xs text-on-surface-variant mb-3 font-medium">🌱 Season: {crop.growingSeason}</p>}
+      </div>
+      {crop.reasons?.length > 0 && (
+        <div className="mb-4 space-y-1">
+          {crop.reasons.slice(0, 2).map((r, i) => (
+            <p key={i} className="text-xs text-on-surface-variant flex items-start gap-1"><span className="text-primary font-bold shrink-0">✓</span>{r}</p>
+          ))}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-surface-container-low p-3 rounded-2xl">
+          <p className="text-[9px] font-bold text-on-surface-variant mb-1 uppercase">Expected Yield</p>
+          <p className="text-lg font-black">{crop.expectedYield}</p>
+        </div>
+        <div className="bg-surface-container-low p-3 rounded-2xl">
+          <p className="text-[9px] font-bold text-on-surface-variant mb-1 uppercase">Est. Profit</p>
+          <p className="text-lg font-black text-tertiary">{crop.estimatedProfit}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={cn('px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider',
+          crop.demand?.toLowerCase().includes('high') ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800')}>
+          {crop.demand}
+        </span>
+        <span className={cn('px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1',
+          crop.riskLevel?.toLowerCase().includes('low') ? 'bg-surface-container text-on-surface' : 'bg-red-100 text-red-800')}>
+          <ShieldCheck className="w-3 h-3" />{crop.riskLevel}
+        </span>
+      </div>
+    </motion.div>
+  );
 }
 
 export default function CropRecommendation() {
   const { t } = useApp();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [n, setN] = useState<string>('');
-  const [p, setP] = useState<string>('');
-  const [k, setK] = useState<string>('');
+  const uid = currentUser?.uid ?? '';
+
+  const [tab, setTab] = useState<'new' | 'history'>('new');
+  const [fields, setFields] = useState<Field[]>([]);
+  const [selectedField, setSelectedField] = useState<Field | null>(null);
+  const [fieldOpen, setFieldOpen] = useState(false);
+
+  // Soil inputs
+  const [soilType, setSoilType] = useState('Loamy');
+  const [ph, setPh] = useState('');
+  const [n, setN] = useState('');
+  const [p, setP] = useState('');
+  const [k, setK] = useState('');
+  const [moisture, setMoisture] = useState('');
+  const [fertility, setFertility] = useState('Medium');
 
   const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [weatherLoading, setWeatherLoading] = useState(true);
-
-  const [prediction, setPrediction] = useState<PredictionResult | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(false);
+  const [prediction, setPrediction] = useState<{ results: CropRecResult[]; summary: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<CropRecHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
+  // Load user fields
   useEffect(() => {
-    const fetchWeatherByUrl = async (url: string) => {
-      try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Weather fetch failed');
-        const data = await response.json();
-        setWeather({
-          temp: Math.round(data.main.temp),
-          humidity: data.main.humidity,
-          description: data.weather[0]?.description || 'Clear',
-          city: data.name
-        });
-      } catch (err) {
-        console.error('Weather error:', err);
-      } finally {
-        setWeatherLoading(false);
-      }
-    };
+    if (!uid) return;
+    getUserFields(uid).then(setFields).catch(console.error);
+  }, [uid]);
 
+  // Load history when switching to history tab
+  useEffect(() => {
+    if (tab !== 'history' || !uid) return;
+    setHistoryLoading(true);
+    getCropRecommendationHistory(uid).then(setHistory).catch(console.error).finally(() => setHistoryLoading(false));
+  }, [tab, uid]);
+
+  const fetchWeather = useCallback(async (lat: number, lng: number) => {
     const apiKey = import.meta.env.VITE_WEATHER_API_KEY;
-    const fetchWeatherByIpFallback = async () => {
-      try {
-        const geoRes = await fetch('https://get.geojs.io/v1/ip/geo.json');
-        if (!geoRes.ok) throw new Error('IP Geo failed');
-        const geoData = await geoRes.json();
-        fetchWeatherByUrl(`https://api.openweathermap.org/data/2.5/weather?lat=${geoData.latitude}&lon=${geoData.longitude}&units=metric&appid=${apiKey}`);
-      } catch {
-        fetchWeatherByUrl(`https://api.openweathermap.org/data/2.5/weather?q=Dhaka,BD&units=metric&appid=${apiKey}`);
-      }
-    };
-
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          fetchWeatherByUrl(`https://api.openweathermap.org/data/2.5/weather?lat=${position.coords.latitude}&lon=${position.coords.longitude}&units=metric&appid=${apiKey}`);
-        },
-        () => fetchWeatherByIpFallback(),
-        { timeout: 5000 }
-      );
-    } else {
-      fetchWeatherByIpFallback();
-    }
+    if (!apiKey) return;
+    setWeatherLoading(true);
+    try {
+      const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lng}&units=metric&appid=${apiKey}`);
+      if (!res.ok) throw new Error('Weather fetch failed');
+      const data = await res.json();
+      setWeather({ temp: Math.round(data.main.temp), humidity: data.main.humidity, description: data.weather[0]?.description || 'Clear', city: data.name });
+    } catch { /* silently ignore */ } finally { setWeatherLoading(false); }
   }, []);
 
+  // When field selected → fetch weather from field's GPS location
+  useEffect(() => {
+    if (!selectedField) return;
+    const { lat, lng } = selectedField.center_point;
+    if (lat && lng) fetchWeather(lat, lng);
+  }, [selectedField, fetchWeather]);
+
+  // Fallback: auto-detect location if no field selected
+  useEffect(() => {
+    if (selectedField) return;
+    const apiKey = import.meta.env.VITE_WEATHER_API_KEY;
+    if (!apiKey) return;
+    if (!('geolocation' in navigator)) return;
+    navigator.geolocation.getCurrentPosition(
+      pos => fetchWeather(pos.coords.latitude, pos.coords.longitude),
+      () => {/* ignore */},
+      { timeout: 5000 }
+    );
+  }, [selectedField, fetchWeather]);
+
   const getRecommendation = async () => {
-    if (!n || !p || !k) {
-      setError('Please enter values for Nitrogen, Phosphorus, and Potassium.');
-      return;
-    }
-
+    if (!uid) { setError('Please log in first.'); return; }
+    if (!n || !p || !k) { setError('Please enter NPK values.'); return; }
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) {
-      setError('System Error: API Key is missing.');
-      return;
-    }
+    if (!apiKey) { setError('Gemini API key missing.'); return; }
 
-    setLoading(true);
-    setError(null);
-    setPrediction(null);
-
+    setLoading(true); setError(null); setPrediction(null);
     try {
       const ai = new GoogleGenAI({ apiKey });
 
-      const weatherContext = weather
-        ? `Location: ${weather.city}. Weather: ${weather.temp}°C, ${weather.humidity}% humidity, ${weather.description}.`
-        : 'Location and weather data unavailable. Assume typical seasonal conditions in Bangladesh.';
+      const weatherCtx = weather
+        ? `Current weather at ${weather.city}: ${weather.temp}°C, humidity ${weather.humidity}%, conditions: ${weather.description}.`
+        : 'Weather data unavailable. Assume typical seasonal conditions for Bangladesh.';
 
-      const prompt = `Act as an expert agronomist in Bangladesh. 
-      ${weatherContext}
-      Soil NPK values (mg/kg or exact units provided by user): Nitrogen (N)=${n}, Phosphorus (P)=${p}, Potassium (K)=${k}.
+      const fieldCtx = selectedField
+        ? `Selected field: "${selectedField.field_name}", area: ${selectedField.area_size} ${selectedField.area_unit}, GPS: ${selectedField.center_point.lat.toFixed(4)}, ${selectedField.center_point.lng.toFixed(4)}.`
+        : 'No specific field selected.';
 
-      Based on these precise NPK values and the current weather/location, recommend exactly THREE crops that are highly suitable to be planted right now.
-      Return response in STRICT JSON format matching this structure exactly:
-      {
-        "recommendations": [
-          {
-            "cropName": "Name of the crop (English & Bengali)",
-            "suitability": 98,
-            "expectedYield": "e.g., 4.2 MT/ha",
-            "estimatedProfit": "e.g., +৳84,200",
-            "riskLevel": "Low Risk",
-            "demand": "High Demand"
-          }
-        ],
-        "weatherImpact": "Short description of how the current weather and soil profile impact these choices."
-      }
-      Do not include any markdown formatting, just the JSON string.`;
+      const prompt = `You are an expert agronomist specializing in Bangladesh agriculture.
 
-      const result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-      });
+FIELD CONTEXT: ${fieldCtx}
+WEATHER: ${weatherCtx}
+SOIL DATA:
+- Type: ${soilType}
+- pH: ${ph || 'unknown'}
+- NPK: Nitrogen=${n} mg/kg, Phosphorus=${p} mg/kg, Potassium=${k} mg/kg
+- Moisture: ${moisture || 'not specified'}
+- Fertility Level: ${fertility}
 
+Based on ALL the above data, recommend exactly 3 crops most suitable for planting right now.
+For each crop, provide specific reasons linking to the soil, weather, and field conditions.
+
+Return ONLY valid JSON (no markdown):
+{
+  "recommendations": [
+    {
+      "cropName": "Crop name (English & Bengali)",
+      "suitability": 95,
+      "reasons": ["Reason tied to weather/soil data", "Another specific reason"],
+      "growingSeason": "e.g., June–October (Kharif)",
+      "expectedYield": "e.g., 4.2 MT/ha",
+      "estimatedProfit": "e.g., +৳84,200",
+      "riskLevel": "Low Risk",
+      "demand": "High Demand"
+    }
+  ],
+  "summary": "2-sentence insight on why these crops are best given current weather and soil."
+}`;
+
+      const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
       const text = result.text;
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('Invalid AI response format');
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('Invalid AI response format.');
+      const data = JSON.parse(match[0]);
+      if (!data.recommendations?.length) throw new Error('No recommendations returned.');
+      const pred = { results: data.recommendations as CropRecResult[], summary: data.summary || '' };
+      setPrediction(pred);
 
-      const data = JSON.parse(jsonMatch[0]);
-      if (!data.recommendations || data.recommendations.length !== 3) {
-        throw new Error('AI did not return exactly 3 recommendations.');
-      }
-      setPrediction(data);
+      // Auto-save to Firebase
+      setSaving(true);
+      await saveCropRecommendationResult(uid, {
+        field_id: selectedField?.field_id || '',
+        field_name: selectedField?.field_name || 'No field selected',
+        field_area: selectedField ? `${selectedField.area_size} ${selectedField.area_unit}` : '',
+        soil: { type: soilType, ph, n, p, k, moisture, fertility },
+        weather,
+        results: pred.results,
+        summary: pred.summary,
+      });
     } catch (err: any) {
       console.error('AI Error:', err);
       setError(`AI Error: ${err.message || 'Check your connection.'}`);
     } finally {
-      setLoading(false);
+      setLoading(false); setSaving(false);
     }
+  };
+
+  const handleDeleteHistory = async (entry: CropRecHistoryEntry) => {
+    if (!entry.id || !window.confirm('Delete this recommendation?')) return;
+    await deleteCropRecommendationResult(uid, entry.id);
+    setHistory(h => h.filter(x => x.id !== entry.id));
   };
 
   return (
     <Layout title={t('cropSelection')} showBack>
-      <div className="px-6 pb-24 space-y-8">
-        {/* Header & Weather Info */}
-        <section className="space-y-6">
-          <div className="flex flex-col gap-4">
-            <div className="max-w-2xl">
-              <span className="inline-block bg-primary-container text-on-primary px-3 py-1 rounded-full text-[10px] font-bold tracking-wider mb-2 uppercase">
-                AI Recommendation Engine
-              </span>
-              <h1 className="text-4xl font-black text-on-surface tracking-tight leading-tight">
-                Optimize Your <span className="text-primary italic">Harvest</span>
-              </h1>
-              <p className="text-on-surface-variant text-sm mt-2 font-medium">
-                Enter your soil NPK levels. We'll combine this with real-time weather to suggest the best 3 crops.
-              </p>
-            </div>
-          </div>
+      <div className="px-6 pb-24 space-y-6">
+        {/* Header */}
+        <div>
+          <span className="inline-block bg-primary-container text-on-primary px-3 py-1 rounded-full text-[10px] font-bold tracking-wider mb-2 uppercase">AI Recommendation Engine</span>
+          <h1 className="text-4xl font-black text-on-surface tracking-tight leading-tight">
+            Optimize Your <span className="text-primary italic">Harvest</span>
+          </h1>
+          <p className="text-on-surface-variant text-sm mt-2">Field-aware AI crop recommendations powered by weather & soil data.</p>
+        </div>
 
-          {/* Real-time Weather Badge */}
-          <div className="bg-surface-container-low p-4 rounded-2xl flex items-center justify-between border border-outline-variant/30">
-            {weatherLoading ? (
-              <div className="flex items-center gap-2 text-on-surface-variant">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs font-bold uppercase tracking-wider">Locating farm...</span>
-              </div>
-            ) : weather ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-primary" />
-                  <span className="font-bold text-sm">{weather.city}</span>
-                </div>
-                <div className="flex items-center gap-4 text-sm font-bold text-on-surface-variant">
-                  <div className="flex items-center gap-1"><Thermometer className="w-4 h-4" /> {weather.temp}°C</div>
-                  <div className="flex items-center gap-1"><Droplets className="w-4 h-4" /> {weather.humidity}%</div>
-                </div>
-              </>
-            ) : (
-              <span className="text-xs font-bold text-error uppercase">Weather unavailable</span>
-            )}
-          </div>
-
-          {/* NPK Input Form */}
-          <div className="bg-white rounded-[2rem] p-6 shadow-xl border border-white/50 relative space-y-6">
-            <div>
-              <h3 className="font-black text-lg mb-4 flex items-center gap-2">
-                <Leaf className="w-5 h-5 text-primary" />
-                Soil NPK Levels
-              </h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-on-surface-variant">Nitrogen (N)</label>
-                  <input
-                    type="number"
-                    value={n}
-                    onChange={(e) => setN(e.target.value)}
-                    placeholder="e.g. 45"
-                    className="w-full bg-surface-container-lowest rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 border border-outline-variant/20"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-on-surface-variant">Phosphorus (P)</label>
-                  <input
-                    type="number"
-                    value={p}
-                    onChange={(e) => setP(e.target.value)}
-                    placeholder="e.g. 20"
-                    className="w-full bg-surface-container-lowest rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-tertiary/20 border border-outline-variant/20"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase text-on-surface-variant">Potassium (K)</label>
-                  <input
-                    type="number"
-                    value={k}
-                    onChange={(e) => setK(e.target.value)}
-                    placeholder="e.g. 30"
-                    className="w-full bg-surface-container-lowest rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 border border-outline-variant/20"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={getRecommendation}
-              disabled={loading || !n || !p || !k}
-              className="w-full bg-primary text-on-primary py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
-            >
-              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
-              {loading ? 'Analyzing Data...' : 'Get Top 3 Recommendations'}
+        {/* Tabs */}
+        <div className="flex bg-surface-container-low rounded-2xl p-1 gap-1">
+          {(['new', 'history'] as const).map(t2 => (
+            <button key={t2} onClick={() => setTab(t2)}
+              className={cn('flex-1 py-2.5 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all',
+                tab === t2 ? 'bg-primary text-white shadow-sm' : 'text-on-surface-variant')}>
+              {t2 === 'new' ? <><Plus className="w-4 h-4" />New</> : <><History className="w-4 h-4" />History</>}
             </button>
-          </div>
-        </section>
+          ))}
+        </div>
 
         <AnimatePresence mode="wait">
-          {error && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="bg-error-container text-on-error-container p-5 rounded-[2rem] flex gap-3 border border-error/10">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <p className="text-sm font-bold">{error}</p>
-            </motion.div>
-          )}
 
-          {prediction && !loading && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-6"
-            >
-              {/* Weather Impact Summary */}
-              <section className="bg-tertiary text-on-primary rounded-[2rem] p-6 relative overflow-hidden">
-                <div className="relative z-10">
-                  <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
-                    <CloudLightning className="w-5 h-5 fill-current" />
-                    AI Weather & Soil Insight
-                  </h3>
-                  <p className="text-on-primary/90 text-sm leading-relaxed">
-                    {prediction.weatherImpact}
-                  </p>
+          {tab === 'new' && (
+            <motion.div key="new" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
+
+              {/* Field Selector */}
+              <div className="bg-surface-container-lowest rounded-[2rem] p-5 border border-outline-variant/10 shadow-sm space-y-3">
+                <h3 className="font-black text-base flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" />Select Field (optional)</h3>
+                <div className="relative">
+                  <button onClick={() => setFieldOpen(o => !o)}
+                    className="w-full bg-surface-container-low rounded-xl px-4 py-3 text-sm font-bold text-left flex items-center justify-between border border-outline-variant/20">
+                    <span className={selectedField ? 'text-on-surface' : 'text-on-surface-variant'}>
+                      {selectedField ? `${selectedField.field_name} · ${selectedField.area_size} ${selectedField.area_unit}` : 'No field selected (use device location)'}
+                    </span>
+                    <ChevronDown className={cn('w-4 h-4 transition-transform', fieldOpen && 'rotate-180')} />
+                  </button>
+                  {fieldOpen && (
+                    <div className="absolute z-20 mt-1 w-full bg-surface-container-lowest rounded-2xl shadow-xl border border-outline-variant/20 overflow-hidden">
+                      <button onClick={() => { setSelectedField(null); setFieldOpen(false); }}
+                        className="w-full px-4 py-3 text-sm text-left text-on-surface-variant hover:bg-surface-container-low transition-colors">
+                        None (use device location)
+                      </button>
+                      {fields.length === 0 && <p className="px-4 py-3 text-sm text-on-surface-variant">No saved fields. Add fields in the Fields tab.</p>}
+                      {fields.map(f => (
+                        <button key={f.field_id} onClick={() => { setSelectedField(f); setFieldOpen(false); }}
+                          className="w-full px-4 py-3 text-sm text-left hover:bg-surface-container-low transition-colors border-t border-outline-variant/10">
+                          <p className="font-bold">{f.field_name}</p>
+                          <p className="text-xs text-on-surface-variant">{f.area_size} {f.area_unit} · {f.input_mode === 'polygon' ? 'GPS Mapped' : 'Simple'}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </section>
-
-              {/* 3 Crop Recommendations */}
-              <div className="space-y-4">
-                <h3 className="font-black text-xl px-2">Top 3 Matches</h3>
-                {prediction.recommendations.map((crop, idx) => (
-                  <motion.div
-                    key={idx}
-                    onClick={() => navigate(`/tools/crops/roadmap?crop=${encodeURIComponent(crop.cropName)}`)}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.1 }}
-                    className="bg-surface-container-lowest rounded-[2rem] p-6 shadow-lg border border-outline-variant/10 relative overflow-hidden cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all"
-                  >
-                    <div className="absolute top-0 right-0 bg-primary text-on-primary px-4 py-2 rounded-bl-3xl font-black text-lg shadow-md">
-                      #{idx + 1}
-                    </div>
-
-                    <div className="pr-12">
-                      <h3 className="text-2xl font-black mb-1">{crop.cropName}</h3>
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="h-2 w-24 bg-surface-container-high rounded-full overflow-hidden">
-                          <div className="h-full bg-primary" style={{ width: `${crop.suitability}%` }} />
-                        </div>
-                        <span className="text-xs font-bold text-primary">{crop.suitability}% Match</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <div className="bg-surface-container-low p-3 rounded-2xl">
-                        <p className="text-[9px] font-bold text-on-surface-variant mb-1 uppercase">Expected Yield</p>
-                        <p className="text-lg font-black">{crop.expectedYield}</p>
-                      </div>
-                      <div className="bg-surface-container-low p-3 rounded-2xl">
-                        <p className="text-[9px] font-bold text-on-surface-variant mb-1 uppercase">Est. Profit</p>
-                        <p className="text-lg font-black text-tertiary">{crop.estimatedProfit}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={cn(
-                        "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                        crop.demand.toLowerCase().includes('high') ? "bg-green-100 text-green-800" : "bg-orange-100 text-orange-800"
-                      )}>
-                        {crop.demand}
-                      </span>
-                      <span className={cn(
-                        "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1",
-                        crop.riskLevel.toLowerCase().includes('low') ? "bg-surface-container text-on-surface" : "bg-red-100 text-red-800"
-                      )}>
-                        <ShieldCheck className="w-3 h-3" />
-                        {crop.riskLevel}
-                      </span>
-                    </div>
-                  </motion.div>
-                ))}
               </div>
+
+              {/* Weather Badge */}
+              <div className="bg-surface-container-low p-4 rounded-2xl flex items-center justify-between border border-outline-variant/30">
+                {weatherLoading ? (
+                  <div className="flex items-center gap-2 text-on-surface-variant"><Loader2 className="w-4 h-4 animate-spin" /><span className="text-xs font-bold uppercase">Fetching weather…</span></div>
+                ) : weather ? (
+                  <>
+                    <div className="flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" /><span className="font-bold text-sm">{weather.city}</span></div>
+                    <div className="flex items-center gap-4 text-sm font-bold text-on-surface-variant">
+                      <div className="flex items-center gap-1"><Thermometer className="w-4 h-4" />{weather.temp}°C</div>
+                      <div className="flex items-center gap-1"><Droplets className="w-4 h-4" />{weather.humidity}%</div>
+                    </div>
+                  </>
+                ) : (
+                  <span className="text-xs font-bold text-on-surface-variant uppercase">Weather unavailable</span>
+                )}
+              </div>
+
+              {/* Soil Form */}
+              <div className="bg-white rounded-[2rem] p-6 shadow-xl border border-white/50 space-y-5">
+                <h3 className="font-black text-lg flex items-center gap-2"><Leaf className="w-5 h-5 text-primary" />Soil Data</h3>
+
+                {/* Soil Type + Fertility */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">Soil Type</label>
+                    <select value={soilType} onChange={e => setSoilType(e.target.value)} className={inputCls}>
+                      {SOIL_TYPES.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">Fertility</label>
+                    <select value={fertility} onChange={e => setFertility(e.target.value)} className={inputCls}>
+                      {FERTILITY.map(f => <option key={f}>{f}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* pH + Moisture */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">pH Level</label>
+                    <input type="number" step="0.1" min="0" max="14" value={ph} onChange={e => setPh(e.target.value)} placeholder="e.g. 6.5" className={inputCls} />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-on-surface-variant">Moisture %</label>
+                    <input type="number" value={moisture} onChange={e => setMoisture(e.target.value)} placeholder="e.g. 65" className={inputCls} />
+                  </div>
+                </div>
+
+                {/* NPK */}
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-on-surface-variant mb-2">NPK Values (mg/kg) *</p>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[['N', n, setN], ['P', p, setP], ['K', k, setK]].map(([label, val, set]) => (
+                      <div key={label as string} className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-on-surface-variant">{label as string}</label>
+                        <input type="number" value={val as string} onChange={e => (set as any)(e.target.value)} placeholder="e.g. 45" className={inputCls} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button onClick={getRecommendation} disabled={loading || !n || !p || !k}
+                  className="w-full bg-primary text-on-primary py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform">
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
+                  {loading ? 'Analyzing…' : saving ? 'Saving…' : 'Get AI Recommendations'}
+                </button>
+              </div>
+
+              {/* Error */}
+              {error && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  className="bg-error-container text-on-error-container p-5 rounded-[2rem] flex gap-3 border border-error/10">
+                  <AlertCircle className="w-5 h-5 shrink-0" /><p className="text-sm font-bold">{error}</p>
+                </motion.div>
+              )}
+
+              {/* Results */}
+              {prediction && !loading && (
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                  <section className="bg-tertiary text-on-primary rounded-[2rem] p-6">
+                    <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
+                      <CloudLightning className="w-5 h-5 fill-current" />AI Insight
+                    </h3>
+                    <p className="text-on-primary/90 text-sm leading-relaxed">{prediction.summary}</p>
+                  </section>
+                  <div className="space-y-4">
+                    <h3 className="font-black text-xl px-2">Top {prediction.results.length} Recommendations</h3>
+                    {(prediction.results as CropRecResult[]).map((crop: CropRecResult, idx: number) => (
+                      <div key={idx}>
+                        <CropCard crop={crop} idx={idx}
+                          onClick={() => { navigate(`/tools/crops/roadmap?crop=${encodeURIComponent(crop.cropName)}`); }} />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-center text-xs text-on-surface-variant">✓ Saved to your recommendation history</p>
+                </motion.div>
+              )}
             </motion.div>
           )}
+
+          {tab === 'history' && (
+            <motion.div key="history" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-5">
+              {historyLoading && <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}
+              {!historyLoading && history.length === 0 && (
+                <div className="text-center py-16 text-on-surface-variant">
+                  <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                  <p className="font-bold">No recommendations yet</p>
+                  <p className="text-sm mt-1">Generate your first crop recommendation.</p>
+                  <button onClick={() => setTab('new')} className="mt-4 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm">Get Started</button>
+                </div>
+              )}
+              {history.map(entry => (
+                <div key={entry.id} className="bg-surface-container-lowest rounded-[2rem] p-5 border border-outline-variant/10 shadow-sm space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-black text-lg">{entry.field_name}</p>
+                      <p className="text-xs text-on-surface-variant mt-0.5">
+                        {entry.field_area && `${entry.field_area} · `}
+                        {entry.soil.type} · pH {entry.soil.ph || '?'} · N{entry.soil.n}/P{entry.soil.p}/K{entry.soil.k}
+                      </p>
+                      {entry.weather && (
+                        <p className="text-xs text-on-surface-variant mt-0.5">
+                          📍 {entry.weather.city} · {entry.weather.temp}°C · {entry.weather.humidity}% humidity
+                        </p>
+                      )}
+                    </div>
+                    <button onClick={() => handleDeleteHistory(entry)} className="text-outline hover:text-red-500 transition-colors p-1">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {entry.summary && (
+                    <p className="text-xs text-on-surface-variant italic border-l-2 border-primary/30 pl-3">{entry.summary}</p>
+                  )}
+                  <div className="space-y-2">
+                    {entry.results.map((crop, i) => (
+                      <div key={i} className="flex items-center justify-between bg-surface-container-low rounded-2xl px-4 py-3">
+                        <div>
+                          <p className="font-bold text-sm">#{i + 1} {crop.cropName}</p>
+                          {crop.reasons?.[0] && <p className="text-xs text-on-surface-variant mt-0.5">{crop.reasons[0]}</p>}
+                        </div>
+                        <div className="text-right shrink-0 ml-3">
+                          <p className="font-black text-primary text-sm">{crop.suitability}%</p>
+                          <p className="text-xs text-on-surface-variant">{crop.growingSeason}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </motion.div>
+          )}
+
         </AnimatePresence>
       </div>
     </Layout>
