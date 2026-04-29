@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { CloudRain, Wind, Droplets, Thermometer, ChevronRight, Eye } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { CloudRain, Wind, Droplets, ChevronRight, Eye, RotateCcw } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
 
@@ -7,10 +7,17 @@ export default function Weather() {
   const [weatherData, setWeatherData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const fetchWeatherByUrl = async (url: string) => {
+  const fetchWeather = useCallback((showRefreshSpinner = false) => {
+    if (showRefreshSpinner) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+
+    const apiKey = import.meta.env.VITE_WEATHER_API_KEY;
+
+    const fetchByUrl = async (url: string) => {
       try {
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to fetch weather data');
@@ -20,32 +27,36 @@ export default function Weather() {
         setError(err.message);
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
     };
 
-    const apiKey = import.meta.env.VITE_WEATHER_API_KEY;
-
-    const fetchWeatherByIpFallback = async () => {
+    const fetchByIpFallback = async () => {
       try {
         const geoRes = await fetch('https://get.geojs.io/v1/ip/geo.json');
         if (!geoRes.ok) throw new Error('IP Geo failed');
         const geoData = await geoRes.json();
-        fetchWeatherByUrl(`https://api.openweathermap.org/data/2.5/weather?lat=${geoData.latitude}&lon=${geoData.longitude}&units=metric&appid=${apiKey}`);
+        fetchByUrl(`https://api.openweathermap.org/data/2.5/weather?lat=${geoData.latitude}&lon=${geoData.longitude}&units=metric&appid=${apiKey}`);
       } catch {
-        fetchWeatherByUrl(`https://api.openweathermap.org/data/2.5/weather?q=Dhaka,BD&units=metric&appid=${apiKey}`);
+        fetchByUrl(`https://api.openweathermap.org/data/2.5/weather?q=Dhaka,BD&units=metric&appid=${apiKey}`);
       }
     };
 
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
-        ({ coords }) => fetchWeatherByUrl(`https://api.openweathermap.org/data/2.5/weather?lat=${coords.latitude}&lon=${coords.longitude}&units=metric&appid=${apiKey}`),
-        () => fetchWeatherByIpFallback(),
-        { timeout: 10000 }
+        ({ coords }) =>
+          fetchByUrl(`https://api.openweathermap.org/data/2.5/weather?lat=${coords.latitude}&lon=${coords.longitude}&units=metric&appid=${apiKey}`),
+        () => fetchByIpFallback(),
+        { timeout: 10000, enableHighAccuracy: true }
       );
     } else {
-      fetchWeatherByIpFallback();
+      fetchByIpFallback();
     }
   }, []);
+
+  useEffect(() => {
+    fetchWeather();
+  }, [fetchWeather]);
 
   if (loading) {
     return (
@@ -127,9 +138,21 @@ export default function Weather() {
             <p className="text-white/90 font-bold text-base">{city}, {country}</p>
             <p className="text-white/60 text-sm capitalize">{description}</p>
           </div>
-          <div className="flex items-center gap-1 text-white/50 bg-white/10 rounded-xl px-3 py-1.5">
-            <span className="text-[10px] font-bold">7-Day Forecast</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-2">
+            {/* Refresh location button */}
+            <button
+              id="weather-refresh-btn"
+              onClick={(e) => { e.stopPropagation(); fetchWeather(true); }}
+              disabled={refreshing}
+              title="Refresh my location"
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all duration-200 disabled:opacity-50"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 text-white/70 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+            <div className="flex items-center gap-1 text-white/50 bg-white/10 rounded-xl px-3 py-1.5">
+              <span className="text-[10px] font-bold">7-Day Forecast</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </div>
           </div>
         </div>
 

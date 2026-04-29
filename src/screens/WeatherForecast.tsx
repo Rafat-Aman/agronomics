@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Droplets, Wind, Thermometer,
   CloudRain, Sun, Cloud, Zap, Snowflake, AlertTriangle,
-  Leaf, Sprout, Bug, Droplet, CheckCircle2
+  Leaf, Sprout, Bug, Droplet, CheckCircle2, RotateCcw, MapPin
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import Layout from '../components/Layout';
@@ -27,8 +27,14 @@ export default function WeatherForecast() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [locationSource, setLocationSource] = useState<'gps' | 'ip' | 'default' | null>(null);
 
-  useEffect(() => {
+  const fetchWeather = useCallback((isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+
     const apiKey = import.meta.env.VITE_WEATHER_API_KEY;
 
     const fetchAll = async (lat: number, lon: number) => {
@@ -71,29 +77,35 @@ export default function WeatherForecast() {
           };
         });
         setForecast(days);
+        setSelectedDay(0);
       } catch (err: any) {
         setError(err.message);
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
     };
 
     const fallback = () =>
       fetch('https://get.geojs.io/v1/ip/geo.json')
         .then(r => r.json())
-        .then(g => fetchAll(parseFloat(g.latitude), parseFloat(g.longitude)))
-        .catch(() => fetchAll(23.8103, 90.4125)); // default Dhaka
+        .then(g => { setLocationSource('ip'); return fetchAll(parseFloat(g.latitude), parseFloat(g.longitude)); })
+        .catch(() => { setLocationSource('default'); return fetchAll(23.8103, 90.4125); });
 
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
-        ({ coords }) => fetchAll(coords.latitude, coords.longitude),
+        ({ coords }) => { setLocationSource('gps'); fetchAll(coords.latitude, coords.longitude); },
         () => fallback(),
-        { timeout: 10000 }
+        { timeout: 10000, enableHighAccuracy: true }
       );
     } else {
       fallback();
     }
   }, []);
+
+  useEffect(() => {
+    fetchWeather();
+  }, [fetchWeather]);
 
   const getWeatherEmoji = (main: string) => {
     const c = main.toLowerCase();
@@ -165,6 +177,8 @@ export default function WeatherForecast() {
     );
   }
 
+  const locationLabel = locationSource === 'gps' ? '📍 GPS' : locationSource === 'ip' ? '🌐 IP-based' : locationSource === 'default' ? '🏙️ Default' : null;
+
   const current = {
     temp: Math.round(currentWeather.main.temp),
     feelsLike: Math.round(currentWeather.main.feels_like),
@@ -202,8 +216,25 @@ export default function WeatherForecast() {
               </div>
               <p className="text-on-surface-variant capitalize text-sm sm:text-base mt-0.5 sm:mt-1 font-medium">{current.description}</p>
               <p className="text-on-surface-variant/40 text-xs sm:text-sm">Feels like {current.feelsLike}°C</p>
+              {locationLabel && (
+                <div className="flex items-center gap-1 mt-1.5">
+                  <MapPin className="w-3 h-3 text-on-surface-variant/30" />
+                  <span className="text-[9px] sm:text-[10px] text-on-surface-variant/30 font-semibold uppercase tracking-wider">{locationLabel}</span>
+                </div>
+              )}
             </div>
-            <div className="text-5xl sm:text-6xl md:text-7xl">{getWeatherEmoji(current.main)}</div>
+            <div className="flex flex-col items-end gap-2">
+              <button
+                id="forecast-refresh-btn"
+                onClick={() => fetchWeather(true)}
+                disabled={refreshing}
+                title="Refresh my location"
+                className="p-2.5 rounded-2xl bg-surface-container-high hover:bg-surface-container-highest active:scale-95 transition-all duration-200 disabled:opacity-40"
+              >
+                <RotateCcw className={`w-4 h-4 sm:w-5 sm:h-5 text-on-surface-variant/60 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+              <div className="text-4xl sm:text-5xl md:text-6xl">{getWeatherEmoji(current.main)}</div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-5 sm:mt-6">
