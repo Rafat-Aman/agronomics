@@ -152,6 +152,18 @@ export default function CropRecommendation() {
     try {
       const ai = new GoogleGenAI({ apiKey });
 
+      // Derive current date and Bangladesh agricultural season
+      const now = new Date();
+      const month = now.getMonth() + 1; // 1-based
+      const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const getBangladeshSeason = (m: number) => {
+        if (m >= 3 && m <= 5)  return 'Pre-Kharif (March–May): Hot & dry pre-monsoon. Suitable for: Aus rice (early), watermelon, cucumber, bitter gourd, jute (late April onward), sesame, mung bean.';
+        if (m >= 6 && m <= 9)  return 'Kharif / Aman (June–September): Monsoon season. Suitable for: Aman rice, jute, maize, ginger, turmeric, taro, sweet potato.';
+        if (m >= 10 && m <= 11) return 'Rabi transition (October–November): Post-monsoon cooling. Suitable for: Boro rice seedbeds, potato (planting starts Nov), mustard, lentil, chickpea, onion, garlic.';
+        return 'Rabi (December–February): Cool dry winter. Suitable for: Boro rice, wheat, potato (main harvest), mustard, lentil, cauliflower, cabbage, tomato, carrot.';
+      };
+      const currentSeason = getBangladeshSeason(month);
+
       const weatherCtx = weather
         ? `Current weather at ${weather.city}: ${weather.temp}°C, humidity ${weather.humidity}%, conditions: ${weather.description}.`
         : 'Weather data unavailable. Assume typical seasonal conditions for Bangladesh.';
@@ -162,6 +174,11 @@ export default function CropRecommendation() {
 
       const prompt = `You are an expert agronomist specializing in Bangladesh agriculture.
 
+TODAY'S DATE: ${dateStr}
+CURRENT FARMING SEASON: ${currentSeason}
+
+IMPORTANT SEASON RULE: Only recommend crops that are appropriate to SOW or PLANT during this exact month (${now.toLocaleString('en-US', { month: 'long' })}). Do NOT recommend crops whose sowing window has already passed or hasn't started yet. Potato sowing season in Bangladesh is November–December — do not recommend it in April/May/June.
+
 FIELD CONTEXT: ${fieldCtx}
 WEATHER: ${weatherCtx}
 SOIL DATA:
@@ -171,8 +188,8 @@ SOIL DATA:
 - Moisture: ${moisture || 'not specified'}
 - Fertility Level: ${fertility}
 
-Based on ALL the above data, recommend exactly 3 crops most suitable for planting right now.
-For each crop, provide specific reasons linking to the soil, weather, and field conditions.
+Based on ALL the above data, recommend exactly 3 crops most suitable for planting in ${now.toLocaleString('en-US', { month: 'long' })} in Bangladesh.
+For each crop, confirm it is in-season right now and provide specific reasons linking to the soil, weather, and field conditions.
 
 Return ONLY valid JSON (no markdown):
 {

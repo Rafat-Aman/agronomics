@@ -3,8 +3,9 @@ import { useAuth } from '../AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import Layout from '../components/Layout';
-import { getUserFields } from '../lib/db';
+import { getUserFields, getPlantedCrops } from '../lib/db';
 import type { Field } from '../types';
+import type { PlantedCrop } from '../lib/db';
 import { 
   User, 
   MapPin, 
@@ -23,10 +24,12 @@ export default function Profile() {
   const { userProfile, currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [fields, setFields] = useState<Field[]>([]);
+  const [plantedCrops, setPlantedCrops] = useState<PlantedCrop[]>([]);
 
   useEffect(() => {
     if (!currentUser?.uid) return;
     getUserFields(currentUser.uid).then(setFields).catch(console.error);
+    getPlantedCrops(currentUser.uid).then(setPlantedCrops).catch(console.error);
   }, [currentUser?.uid]);
 
   // Compute total area in hectares
@@ -93,6 +96,21 @@ export default function Profile() {
               <span className="font-sans font-bold text-tertiary block text-xs">{t('activeFieldsLabel')}</span>
             </div>
           </div>
+          <div className="col-span-2 bg-emerald-50 border border-emerald-100 p-5 rounded-3xl flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-tighter text-emerald-600/60 mb-1">Active Crops</p>
+              <span className="font-headline font-black text-4xl text-emerald-700 tracking-tighter">
+                {String(plantedCrops.filter(c => c.status === 'growing').length).padStart(2, '0')}
+              </span>
+              <span className="font-sans font-bold text-emerald-600 block text-xs">Currently Growing</span>
+            </div>
+            <button
+              onClick={() => navigate('/my-crops')}
+              className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition-colors"
+            >
+              View All →
+            </button>
+          </div>
         </section>
 
         {/* Menu */}
@@ -104,10 +122,10 @@ export default function Profile() {
           
           <div className="space-y-3">
             {[
-              { icon: MapIcon, label: t('myLand'), desc: t('manageLandBoundaries') },
-              { icon: Sprout, label: t('myCrops'), desc: t('yieldTracking') },
+              { icon: MapIcon, label: t('myLand'), desc: t('manageLandBoundaries'), onClick: () => navigate('/fields') },
+              { icon: Sprout, label: t('myCrops'), desc: t('yieldTracking'), onClick: () => navigate('/my-crops') },
             ].map((item, i) => (
-              <button key={i} className="w-full group flex items-center justify-between p-5 rounded-2xl bg-surface-container-low hover:bg-surface-container transition-all">
+              <button key={i} onClick={item.onClick} className="w-full group flex items-center justify-between p-5 rounded-2xl bg-surface-container-low hover:bg-surface-container transition-all">
                 <div className="flex items-center gap-4 text-left">
                   <div className="w-12 h-12 rounded-xl bg-white flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
                     <item.icon className="w-6 h-6" />

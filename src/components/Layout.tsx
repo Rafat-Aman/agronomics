@@ -4,7 +4,6 @@ import { useApp } from '../AppContext';
 import { 
   Home, 
   Map as MapIcon, 
-  BrainCircuit, 
   User, 
   ChevronLeft,
   Sprout
@@ -28,7 +27,7 @@ export default function Layout({ children, showBack, title, hideNav, hideLangTog
   const navItems = [
     { icon: Home, label: t('home'), path: '/dashboard' },
     { icon: MapIcon, label: t('fields'), path: '/fields' },
-    { icon: BrainCircuit, label: t('aiTools'), path: '/tools' },
+    { icon: Sprout, label: 'ফসল', path: '/my-crops' },
     { icon: User, label: t('profile'), path: '/profile' },
   ];
 

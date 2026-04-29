@@ -586,3 +586,100 @@ export async function getCachedWeather(
   const expires = data.expires_at?.toMillis?.() ?? 0;
   return now < expires ? data : null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLANTED CROPS  →  users/{uid}/planted_crops/{id}
+// Tracks crops the farmer has already planted in their fields
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PlantedCrop {
+  id?: string;
+  cropName: string;
+  localName?: string;           // Bangla / local name
+  fieldId: string;
+  fieldName: string;
+  fieldArea?: string;           // e.g. "2.5 bigha"
+  plantedDate: string;          // ISO date string  "YYYY-MM-DD"
+  expectedHarvestDate?: string; // ISO date string
+  notes?: string;
+  status: 'growing' | 'harvested' | 'failed';
+  created_at: any;
+}
+
+/** Get all planted crops for a user (newest first) */
+export async function getPlantedCrops(userId: string): Promise<PlantedCrop[]> {
+  const colRef = collection(db, `users/${userId}/planted_crops`);
+  const q = query(colRef, orderBy('created_at', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as PlantedCrop));
+}
+
+/** Add a new planted crop record */
+export async function addPlantedCrop(
+  userId: string,
+  crop: Omit<PlantedCrop, 'id' | 'created_at'>
+): Promise<string> {
+  const colRef = collection(db, `users/${userId}/planted_crops`);
+  const docRef = await addDoc(colRef, { ...crop, created_at: serverTimestamp() });
+  return docRef.id;
+}
+
+/** Update an existing planted crop (e.g. change status, add harvest date) */
+export async function updatePlantedCrop(
+  userId: string,
+  cropId: string,
+  updates: Partial<Omit<PlantedCrop, 'id' | 'created_at'>>
+): Promise<void> {
+  await updateDoc(
+    doc(db, `users/${userId}/planted_crops/${cropId}`),
+    updates as Record<string, any>
+  );
+}
+
+/** Delete a planted crop record */
+export async function deletePlantedCrop(userId: string, cropId: string): Promise<void> {
+  await deleteDoc(doc(db, `users/${userId}/planted_crops/${cropId}`));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CROP ADVICE HISTORY  →  users/{uid}/planted_crops/{cropId}/advice/{adviceId}
+// Per-crop AI recommendation timeline
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CropAdvice {
+  id?: string;
+  userNote?: string;   // Farmer's situation description sent to AI
+  content: string;     // Full AI markdown response (Bangla)
+  generated_at: any;  // Firestore serverTimestamp
+}
+
+/** Get all advice entries for a crop, newest first */
+export async function getCropAdviceHistory(
+  userId: string,
+  cropId: string
+): Promise<CropAdvice[]> {
+  const colRef = collection(db, `users/${userId}/planted_crops/${cropId}/advice`);
+  const q = query(colRef, orderBy('generated_at', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as CropAdvice));
+}
+
+/** Save a new advice entry for a crop */
+export async function saveCropAdvice(
+  userId: string,
+  cropId: string,
+  entry: Omit<CropAdvice, 'id' | 'generated_at'>
+): Promise<string> {
+  const colRef = collection(db, `users/${userId}/planted_crops/${cropId}/advice`);
+  const docRef = await addDoc(colRef, { ...entry, generated_at: serverTimestamp() });
+  return docRef.id;
+}
+
+/** Delete a single advice entry */
+export async function deleteCropAdvice(
+  userId: string,
+  cropId: string,
+  adviceId: string
+): Promise<void> {
+  await deleteDoc(doc(db, `users/${userId}/planted_crops/${cropId}/advice/${adviceId}`));
+}

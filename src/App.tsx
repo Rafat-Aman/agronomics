@@ -11,6 +11,8 @@ import DiseaseDetection from './screens/DiseaseDetection';
 import CropRoadmap from './screens/CropRoadmap';
 import KnowledgeCenter from './screens/KnowledgeCenter';
 import Profile from './screens/Profile';
+import MyCrops from './screens/MyCrops';
+import CropDetail from './screens/CropDetail';
 import VoiceAssistant from './screens/VoiceAssistant';
 import WeatherForecast from './screens/WeatherForecast';
 import GuideDetail from './screens/GuideDetail';
@@ -33,6 +35,8 @@ export default function App() {
             <Route path="/tools/crops/roadmap" element={<CropRoadmap />} />
             <Route path="/tools/scan" element={<DiseaseDetection />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/my-crops" element={<MyCrops />} />
+            <Route path="/my-crops/:cropId" element={<CropDetail />} />
             <Route path="/voice" element={<VoiceAssistant />} />
             <Route path="/weather" element={<WeatherForecast />} />
             <Route path="/guide" element={<GuideDetail />} />
