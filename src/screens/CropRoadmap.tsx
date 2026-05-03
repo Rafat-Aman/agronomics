@@ -2,8 +2,12 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { GoogleGenAI } from '@google/genai';
-import { Loader2, AlertCircle, Clock, CheckCircle2, Leaf, Package, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertCircle, Clock, CheckCircle2, Leaf, Package, AlertTriangle, Plus } from 'lucide-react';
 import { motion } from 'motion/react';
+import { useAuth } from '../AuthContext';
+import { db } from '../lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 
 interface RoadmapPhase {
   phaseName: string;
@@ -21,10 +25,35 @@ interface CropRoadmapData {
 
 export default function CropRoadmap() {
   const [searchParams] = useSearchParams();
+  const { userProfile } = useAuth();
+  const navigate = useNavigate();
   const cropName = searchParams.get('crop');
   const [data, setData] = useState<CropRoadmapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const handleAddAsField = async () => {
+    if (!userProfile?.uid || !data) return;
+
+    try {
+      setLoading(true);
+      await addDoc(collection(db, 'fields'), {
+        userId: userProfile.uid,
+        name: `Field ${cropName}`,
+        crop: cropName,
+        growthStage: 0,
+        status: 'HEALTHY',
+        createdAt: serverTimestamp(),
+        roadmap: data
+      });
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Add field error:', err);
+      setError('Failed to sync roadmap to fields.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchRoadmap = async () => {
@@ -73,7 +102,10 @@ export default function CropRoadmap() {
         setData(parsedData);
       } catch (err: any) {
         console.error('Roadmap Error:', err);
-        setError(`Failed to generate roadmap: ${err.message}`);
+        const isBusy = err.message?.includes('503') || err.message?.toLowerCase().includes('demand') || err.message?.toLowerCase().includes('busy');
+        setError(isBusy 
+          ? 'The AI system is temporarily overloaded. Please try again in a few seconds.' 
+          : `Failed to generate roadmap: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -111,6 +143,14 @@ export default function CropRoadmap() {
                 <Clock className="w-4 h-4" />
                 <span>Est. Time: {data.estimatedTotalDuration}</span>
               </div>
+
+              <button 
+                onClick={handleAddAsField}
+                className="mt-6 mx-auto bg-primary text-on-primary px-8 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-primary/30 active:scale-95 transition-all"
+              >
+                <Plus className="w-5 h-5" />
+                Activate this Roadmap
+              </button>
             </div>
 
             <div className="relative border-l-2 border-primary/20 ml-4 space-y-10 py-4">

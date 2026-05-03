@@ -20,11 +20,216 @@ import {
   Calendar,
   Mic,
   CloudSun,
+  TrendingUp,
 } from 'lucide-react';
 import Weather from '../components/Weather';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  addDoc, 
+  serverTimestamp,
+  orderBy,
+  limit 
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { GoogleGenAI } from '@google/genai';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+
+// --- Recent Activity Component ---
+function RecentActivity() {
+  const { t } = useApp();
+  const { userProfile } = useAuth();
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+
+    const q = query(
+      collection(db, 'history'),
+      where('userId', '==', userProfile.uid),
+      orderBy('timestamp', 'desc'),
+      limit(5)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setHistory(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setLoading(false);
+    }, (err) => {
+      console.error("Firestore RecentActivity error:", err);
+      setError("Failed to load activity history.");
+      setLoading(false);
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [userProfile?.uid]);
+
+  if (loading) return null;
+  if (history.length === 0) return null;
+
+  return (
+    <section className="space-y-4">
+      <h3 className="text-2xl font-headline font-bold text-on-surface flex items-center gap-2">
+        {t('recentActivity') || 'Recent AI Activity'}
+      </h3>
+      
+      <div className="space-y-3">
+        {history.map((item) => (
+          <div key={item.id} className="bg-surface-container-low p-4 rounded-2xl flex items-center gap-4 border border-outline-variant/10">
+            <div className={cn(
+              "w-10 h-10 rounded-xl flex items-center justify-center",
+              item.type === 'disease_detection' ? "bg-red-100 text-red-600" : "bg-primary/10 text-primary"
+            )}>
+              {item.type === 'disease_detection' ? <AlertCircle className="w-5 h-5" /> : <TrendingUp className="w-5 h-5" />}
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-sm text-on-surface">{item.title}</p>
+              <p className="text-[10px] text-on-surface-variant font-medium">
+                {item.timestamp?.toDate().toLocaleDateString()} • {item.type === 'disease_detection' ? 'Diagnosis' : 'Recommendation'}
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-on-surface-variant/30" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// --- My Fields Component ---
+function MyFields() {
+  const { t } = useApp();
+  const { userProfile } = useAuth();
+  const [fields, setFields] = useState<Field[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!userProfile?.uid) return;
+
+    const unsubscribe = subscribeToUserFields(userProfile.uid, (fieldsData) => {
+      setFields(fieldsData);
+      setLoading(false);
+    });
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [userProfile?.uid]);
+
+  if (loading) {
+    return (
+      <div className="space-y-4 animate-pulse">
+        <div className="h-8 w-32 bg-outline-variant/20 rounded-lg" />
+        <div className="grid grid-cols-1 gap-4">
+          <div className="h-40 bg-surface-container-low rounded-[1.5rem]" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-2xl font-headline font-bold text-on-surface">
+          {t('myFields')}
+        </h3>
+
+        <button 
+          onClick={() => navigate('/fields')}
+          className="text-primary font-bold text-sm flex items-center gap-1 bg-primary/10 px-3 py-1.5 rounded-full hover:bg-primary/20 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          {t('addField') || 'Add Field'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4">
+        <AnimatePresence mode="popLayout">
+          {fields.length === 0 ? (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="bg-surface-container-low rounded-[1.5rem] p-10 border border-dashed border-outline-variant/50 flex flex-col items-center justify-center text-center space-y-4"
+            >
+              <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+                <Sprout className="w-8 h-8 text-primary" />
+              </div>
+              <div>
+                <p className="font-bold text-on-surface">{t('noFieldsMapped')}</p>
+                <p className="text-sm text-on-surface-variant">{t('addFirstField')}</p>
+              </div>
+            </motion.div>
+          ) : (
+            fields.map((field, idx) => (
+              <motion.div 
+                key={field.field_id}
+                layout
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.1 }}
+                onClick={() => navigate('/fields')}
+                className="bg-surface-container-low rounded-[1.5rem] p-5 space-y-4 border border-outline-variant/20 editorial-shadow-sm cursor-pointer hover:border-primary/30 transition-all"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-bold text-lg text-on-surface">{field.field_name}</h4>
+                    <p className="text-primary font-bold text-sm">
+                      {field.active_crop || (field.area_size ? `${field.area_size} ${field.area_unit}` : 'No crop')}
+                    </p>
+                  </div>
+
+                  <span className={cn(
+                    "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
+                    field.health_status === 'healthy' ? "bg-primary/10 text-primary" 
+                    : field.health_status === 'attention_needed' ? "bg-amber-100 text-amber-800"
+                    : field.health_status === 'critical' ? "bg-red-100 text-red-700"
+                    : "bg-surface-container text-on-surface-variant"
+                  )}>
+                    {field.health_status || 'UNKNOWN'}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] font-black text-on-surface-variant uppercase tracking-widest">
+                    <span>Field Area</span>
+                    <span>{field.area_size} {field.area_unit}</span>
+                  </div>
+
+                  <div className="h-2.5 w-full bg-outline-variant/20 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `100%` }}
+                      transition={{ duration: 1, delay: 0.5 }}
+                      className={cn(
+                        "h-full rounded-full",
+                        field.health_status === 'healthy' ? "bg-primary" : "bg-error"
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {field.health_status !== 'healthy' && field.health_status !== 'unknown' && (
+                  <div className="flex items-center gap-2 text-xs text-error font-bold bg-error/5 p-2 rounded-xl">
+                    <AlertCircle className="w-4 h-4" />
+                    <span>{field.health_status === 'critical' ? 'Critical condition' : 'Attention needed'}</span>
+                  </div>
+                )}
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+    </section>
+  );
+}
+
 
 // --- Daily Guide Component ---
 function DailyGuide() {
@@ -237,66 +442,11 @@ export default function Dashboard() {
         </section>
 
         {/* My Fields */}
-        <section className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-2xl font-headline font-bold text-on-surface">
-              {t('myFields')}
-            </h3>
-            <button onClick={() => navigate('/fields')} className="text-primary font-bold text-sm flex items-center gap-1">
-              {t('seeAll')} <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+        <MyFields />
 
-          {fieldsLoading && (
-            <div className="flex items-center gap-2 text-on-surface-variant py-3">
-              <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-              <span className="text-sm">{t('loadingFields')}</span>
-            </div>
-          )}
+        {/* Recent Activity */}
+        <RecentActivity />
 
-          {!fieldsLoading && fields.length === 0 && (
-            <div className="bg-surface-container-low rounded-[1.5rem] p-6 text-center border border-outline-variant/20 space-y-3">
-              <MapIcon className="w-10 h-10 mx-auto text-primary/30" />
-              <p className="font-bold text-on-surface-variant">{t('noFieldsMapped')}</p>
-              <button onClick={() => navigate('/fields')}
-                className="bg-primary text-white px-5 py-2 rounded-xl text-sm font-bold inline-flex items-center gap-2">
-                <Plus className="w-4 h-4" /> {t('addFirstField')}
-              </button>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-4">
-            {fields.slice(0, 3).map((field) => (
-              <div key={field.field_id}
-                onClick={() => navigate('/fields')}
-                className="bg-surface-container-low rounded-[1.5rem] p-5 space-y-4 border border-outline-variant/20 cursor-pointer hover:border-primary/30 transition-all">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-bold text-lg">{field.field_name}</h4>
-                    <p className="text-primary font-medium text-sm">
-                      {field.area_size} {field.area_unit} · {field.input_mode === 'polygon' ? t('gpsMapped') : t('simpleMode')}
-                    </p>
-                  </div>
-                  <span className={cn(
-                    'px-2 py-1 rounded-md text-[10px] font-bold uppercase',
-                    field.health_status === 'healthy' ? 'bg-primary-container text-on-primary'
-                    : field.health_status === 'attention_needed' ? 'bg-amber-100 text-amber-800'
-                    : field.health_status === 'critical' ? 'bg-red-100 text-red-700'
-                    : 'bg-surface-container text-on-surface-variant'
-                  )}>
-                    {field.health_status === 'healthy' ? t('statusHealthy')
-                      : field.health_status === 'attention_needed' ? t('statusAttention')
-                      : field.health_status === 'critical' ? t('statusCritical')
-                      : t('statusUnknown')}
-                  </span>
-                </div>
-                {field.active_crop && (
-                  <p className="text-sm text-secondary font-medium">{field.active_crop}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
 
         {/* Expert Tools */}
         <section className="space-y-6">

@@ -16,8 +16,12 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import Layout from '../components/Layout';
 import { cn } from '../lib/utils';
+import { useAuth } from '../AuthContext';
+import { db } from '../lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function DiseaseDetection() {
+  const { userProfile } = useAuth();
   const [image, setImage] = useState<string | null>(null);
   const [prediction, setPrediction] = useState<{
     disease: string;
@@ -96,9 +100,25 @@ export default function DiseaseDetection() {
       if (data.error) throw new Error(data.error);
 
       setPrediction(data);
+
+      // Save to Firestore
+      if (userProfile?.uid) {
+        await addDoc(collection(db, 'history'), {
+          userId: userProfile.uid,
+          type: 'disease_detection',
+          result: data,
+          imageUrl: image,
+          timestamp: serverTimestamp(),
+          title: data.disease,
+          severity: data.severity
+        });
+      }
     } catch (err: any) {
       console.error('AI Error:', err);
-      setError(`AI Error: ${err.message || 'Check your internet connection and API key.'}`);
+      const isBusy = err.message?.includes('503') || err.message?.toLowerCase().includes('demand') || err.message?.toLowerCase().includes('busy');
+      setError(isBusy 
+        ? 'The AI system is temporarily overloaded. Please try again in a few seconds.' 
+        : `AI Error: ${err.message || 'Check your internet connection and API key.'}`);
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext';
 import Layout from '../components/Layout';
 import { GoogleGenAI } from '@google/genai';
 import { TrendingUp, ShieldCheck, CloudLightning, Leaf, Loader2, AlertCircle, MapPin, Thermometer, Droplets, History, Plus, ChevronDown, Trash2 } from 'lucide-react';
+
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { getUserFields, saveCropRecommendationResult, getCropRecommendationHistory, deleteCropRecommendationResult } from '../lib/db';
@@ -19,7 +20,7 @@ const FERTILITY_BN = ['কম', 'মাঝারি', 'বেশি'];
 const FERTILITY_EN = ['Low', 'Medium', 'High'];
 const inputCls = 'w-full bg-surface-container-lowest rounded-xl p-3 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 border border-outline-variant/20';
 
-function CropCard({ crop, idx, onClick }: { crop: CropRecResult; idx: number; onClick?: () => void }) {
+function CropCard({ crop, idx, onClick, onSync }: { crop: CropRecResult; idx: number; onClick?: () => void; onSync?: () => void }) {
   return (
     <motion.div onClick={onClick} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
       transition={{ delay: idx * 0.1 }}
@@ -62,6 +63,16 @@ function CropCard({ crop, idx, onClick }: { crop: CropRecResult; idx: number; on
           <ShieldCheck className="w-3 h-3" />{crop.riskLevel}
         </span>
       </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onSync && onSync();
+        }}
+        className="mt-4 w-full bg-primary/10 hover:bg-primary hover:text-white text-primary text-xs font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
+      >
+        <Plus className="w-4 h-4" />
+        Sync to My Fields
+      </button>
     </motion.div>
   );
 }
@@ -69,6 +80,7 @@ function CropCard({ crop, idx, onClick }: { crop: CropRecResult; idx: number; on
 export default function CropRecommendation() {
   const { t } = useApp();
   const { currentUser } = useAuth();
+
   const navigate = useNavigate();
   const uid = currentUser?.uid ?? '';
   const SOIL_TYPES = SOIL_TYPES_BN;
@@ -211,9 +223,41 @@ Return ONLY valid JSON (no markdown):
         results: pred.results,
         summary: pred.summary,
       });
+
     } catch (err: any) {
       console.error('AI Error:', err);
-      setError(`AI Error: ${err.message || 'Check your connection.'}`);
+      const isBusy = err.message?.includes('503') || err.message?.toLowerCase().includes('demand') || err.message?.toLowerCase().includes('busy');
+      setError(isBusy 
+        ? 'The AI system is temporarily overloaded. Please try again in a few seconds.' 
+        : `AI Error: ${err.message || 'Check your internet connection and API key.'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAddAsField = async (crop: CropRecommendation) => {
+    if (!userProfile?.uid) return;
+
+    try {
+      setLoading(true);
+      // 1. Create the Field
+      const fieldRef = await addDoc(collection(db, 'fields'), {
+        userId: userProfile.uid,
+        name: `Field ${crop.cropName.split(' ')[0]}`,
+        crop: crop.cropName,
+        growthStage: 0,
+        status: 'HEALTHY',
+        createdAt: serverTimestamp(),
+        soil: { n, p, k },
+        weather: weather
+      });
+
+      // 2. We could also trigger a roadmap generation here if needed, 
+      // but for now, let's just navigate to dashboard
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Add field error:', err);
+      setError('Failed to add field.');
     } finally {
       setLoading(false); setSaving(false);
     }
@@ -281,6 +325,7 @@ Return ONLY valid JSON (no markdown):
                     </div>
                   )}
                 </div>
+
               </div>
 
               {/* Weather Badge */}
@@ -374,7 +419,8 @@ Return ONLY valid JSON (no markdown):
                     {(prediction.results as CropRecResult[]).map((crop: CropRecResult, idx: number) => (
                       <div key={idx}>
                         <CropCard crop={crop} idx={idx}
-                          onClick={() => { navigate(`/tools/crops/roadmap?crop=${encodeURIComponent(crop.cropName)}`); }} />
+                          onClick={() => { navigate(`/tools/crops/roadmap?crop=${encodeURIComponent(crop.cropName)}`); }}
+                          onSync={() => handleAddAsField(crop)} />
                       </div>
                     ))}
                   </div>

@@ -59,6 +59,20 @@ import type {
   WeatherCache,
 } from '../types';
 
+export interface VoiceChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: any;
+}
+
+export interface VoiceChatSession {
+  id: string;
+  title: string;
+  lastMessage: string;
+  updatedAt: any;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // USERS API  →  users/{user_id}
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,6 +218,8 @@ export function subscribeToUserFields(
   const colRef = collection(db, `users/${userId}/fields`);
   return onSnapshot(colRef, snap => {
     callback(snap.docs.map(d => ({ field_id: d.id, ...d.data() } as Field)));
+  }, error => {
+    console.error("Firestore subscribeToUserFields error:", error);
   });
 }
 
@@ -419,6 +435,8 @@ export function subscribeToAiRequest(
 ): Unsubscribe {
   return onSnapshot(doc(db, 'ai_requests', requestId), snap => {
     callback(snap.exists() ? ({ request_id: snap.id, ...snap.data() } as AiRequest) : null);
+  }, error => {
+    console.error("Firestore subscribeToAiRequest error:", error);
   });
 }
 
@@ -457,6 +475,8 @@ export function subscribeToDetections(
   const colRef = collection(db, `users/${userId}/detections`);
   return onSnapshot(query(colRef, orderBy('created_at', 'desc')), snap => {
     callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as DiseaseDetection)));
+  }, error => {
+    console.error("Firestore subscribeToDetections error:", error);
   });
 }
 
@@ -585,4 +605,88 @@ export async function getCachedWeather(
   const now = Date.now();
   const expires = data.expires_at?.toMillis?.() ?? 0;
   return now < expires ? data : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VOICE CHAT API (Sessions) →  users/{uid}/voice_sessions/{sid}
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Create a new chat session */
+export async function createVoiceChatSession(
+  userId: string,
+  title: string = 'New Conversation'
+): Promise<string> {
+  const colRef = collection(db, `users/${userId}/voice_sessions`);
+  const docRef = await addDoc(colRef, {
+    title,
+    lastMessage: '',
+    updatedAt: serverTimestamp(),
+    createdAt: serverTimestamp(),
+  });
+  return docRef.id;
+}
+
+/** Get all chat sessions for a user */
+export async function getVoiceChatSessions(userId: string): Promise<VoiceChatSession[]> {
+  const colRef = collection(db, `users/${userId}/voice_sessions`);
+  const q = query(colRef, orderBy('updatedAt', 'desc'));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as VoiceChatSession));
+}
+
+/** Subscribe to chat sessions */
+export function subscribeToVoiceSessions(
+  userId: string,
+  callback: (sessions: VoiceChatSession[]) => void
+): Unsubscribe {
+  const colRef = collection(db, `users/${userId}/voice_sessions`);
+  const q = query(colRef, orderBy('updatedAt', 'desc'));
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as VoiceChatSession)));
+  }, error => {
+    console.error("Firestore subscribeToVoiceSessions error:", error);
+  });
+}
+
+/** Save a message to a specific session */
+export async function saveVoiceChatMessage(
+  userId: string,
+  sessionId: string,
+  role: 'user' | 'assistant',
+  text: string
+): Promise<void> {
+  // 1. Add the message
+  const msgColRef = collection(db, `users/${userId}/voice_sessions/${sessionId}/messages`);
+  await addDoc(msgColRef, {
+    role,
+    text,
+    timestamp: serverTimestamp(),
+  });
+
+  // 2. Update session last message and timestamp
+  const sessionDocRef = doc(db, `users/${userId}/voice_sessions`, sessionId);
+  await updateDoc(sessionDocRef, {
+    lastMessage: text,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Subscribe to messages in a specific session */
+export function subscribeToSessionMessages(
+  userId: string,
+  sessionId: string,
+  callback: (messages: VoiceChatMessage[]) => void
+): Unsubscribe {
+  const colRef = collection(db, `users/${userId}/voice_sessions/${sessionId}/messages`);
+  const q = query(colRef, orderBy('timestamp', 'asc'));
+  return onSnapshot(q, snap => {
+    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as VoiceChatMessage)));
+  }, error => {
+    console.error("Firestore subscribeToSessionMessages error:", error);
+  });
+}
+
+/** Delete a chat session */
+export async function deleteVoiceChatSession(userId: string, sessionId: string): Promise<void> {
+  await deleteDoc(doc(db, `users/${userId}/voice_sessions`, sessionId));
 }
