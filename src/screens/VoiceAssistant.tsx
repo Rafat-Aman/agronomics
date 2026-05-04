@@ -2,7 +2,16 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from '../components/Layout';
 import { GoogleGenAI } from '@google/genai';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mic, MicOff, Volume2, VolumeX, Trash2, Sprout, Languages, Info } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Trash2, Sprout, Languages, Info, Menu, X, MessageSquare, PlusCircle } from 'lucide-react';
+import { useAuth } from '../AuthContext';
+import { 
+  saveVoiceChatMessage, 
+  subscribeToSessionMessages, 
+  createVoiceChatSession, 
+  subscribeToVoiceSessions,
+  deleteVoiceChatSession,
+  VoiceChatSession
+} from '../lib/db';
 
 interface Message {
   id: string;
@@ -25,10 +34,19 @@ export default function VoiceAssistant() {
   const [textInput, setTextInput] = useState('');
   const [bnVoiceAvailable, setBnVoiceAvailable] = useState<boolean | null>(null);
   const [micSupported] = useState(() => !!SpeechRecognitionAPI);
+  
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sessions, setSessions] = useState<VoiceChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+
+  const { userProfile } = useAuth();
+  const userId = userProfile?.uid;
 
   const recognitionRef = useRef<any>(null);
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sendToAIRef = useRef<any>(null);
+  const isThinkingRef = useRef(false);
 
   const isBn = voiceLang === 'bn-BD';
 
@@ -64,16 +82,51 @@ export default function VoiceAssistant() {
     };
   }, []);
 
-  // ── Greeting on mount ────────────────────────────────────────────────────
+  // ── Sync Sessions ───────────────────────────────────────────────────────
   useEffect(() => {
-    setMessages([{
-      id: 'greeting',
-      role: 'assistant',
-      text: GREETINGS[voiceLang],
-      timestamp: new Date(),
-    }]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!userId) return;
+    const unsubscribe = subscribeToVoiceSessions(userId, (dbSessions) => {
+      setSessions(dbSessions);
+    });
+    return () => unsubscribe();
+  }, [userId]);
+
+  // ── Sync Messages for Current Session ───────────────────────────────────
+  useEffect(() => {
+    // 1. Initial State: If no session, show greeting immediately
+    if (!userId || !currentSessionId) {
+      setMessages([{
+        id: 'greeting',
+        role: 'assistant',
+        text: GREETINGS[voiceLang],
+        timestamp: new Date(),
+      }]);
+      return;
+    }
+
+    // 2. Load Session Messages
+    const unsubscribe = subscribeToSessionMessages(userId, currentSessionId, (dbMessages) => {
+      // Avoid flicker: if dbMessages is empty, we don't immediately revert to greeting 
+      // if we are currently thinking (as that means a message was just sent)
+      if (dbMessages.length > 0) {
+        const mapped = dbMessages.map(m => ({
+          ...m,
+          timestamp: m.timestamp?.toDate ? m.timestamp.toDate() : (m.timestamp ? new Date(m.timestamp) : new Date())
+        }));
+        setMessages(mapped);
+      } else if (!isThinkingRef.current) {
+        // Only show greeting if there are truly no messages and we aren't waiting for AI
+        setMessages([{
+          id: 'greeting',
+          role: 'assistant',
+          text: GREETINGS[voiceLang],
+          timestamp: new Date(),
+        }]);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [userId, currentSessionId]); // Removed voiceLang and isThinking to prevent churn
 
   // ── Auto scroll ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -130,17 +183,48 @@ export default function VoiceAssistant() {
     setIsSpeaking(false);
   }, []);
 
-  // ── Send to Gemini ────────────────────────────────────────────────────────
+  // ── Sync sendToAI ref to avoid stale closures in listeners ────────────────
   const sendToAI = useCallback(async (userText: string) => {
     if (!userText.trim() || isThinking) return;
 
-    setMessages((prev) => [...prev, {
-      id: Date.now().toString(),
-      role: 'user',
-      text: userText.trim(),
-      timestamp: new Date(),
-    }]);
     setIsThinking(true);
+    isThinkingRef.current = true;
+    
+    if (!userId) {
+      setMessages(prev => [...prev, {
+        id: 'auth-err-' + Date.now(),
+        role: 'assistant',
+        text: isBn ? 'দয়া করে লগইন করুন। ' : 'Please login to use the assistant.',
+        timestamp: new Date()
+      }]);
+      setIsThinking(false);
+      isThinkingRef.current = false;
+      return;
+    }
+
+    let sessionId = currentSessionId;
+    
+    // Create session on first message if none exists
+    if (!sessionId) {
+      const title = userText.trim().slice(0, 30) + (userText.length > 30 ? '...' : '');
+      try {
+        sessionId = await createVoiceChatSession(userId, title);
+        setCurrentSessionId(sessionId);
+      } catch (err) {
+        console.error("Failed to create session:", err);
+        setIsThinking(false);
+        isThinkingRef.current = false;
+        return;
+      }
+    }
+
+    try {
+      await saveVoiceChatMessage(userId, sessionId, 'user', userText.trim());
+    } catch (err) {
+      console.error("Failed to save user message:", err);
+    }
+
+    console.log("[VoiceAssistant] Starting AI request for:", userText);
 
     // ── Prime speech synthesis SYNCHRONOUSLY before any await ──────────────
     // Chrome drops the user-gesture context after the first await, so we must
@@ -154,6 +238,7 @@ export default function VoiceAssistant() {
 
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (!apiKey) {
+      console.error("[VoiceAssistant] Gemini API key is missing from .env");
       setMessages((prev) => [...prev, {
         id: Date.now() + '-err',
         role: 'assistant',
@@ -166,34 +251,51 @@ export default function VoiceAssistant() {
 
     try {
       const ai = new GoogleGenAI({ apiKey });
+      
       const sys = isBn
-        ? 'তুমি একজন অভিজ্ঞ বাংলাদেশি কৃষি বিশেষজ্ঞ। শুধুমাত্র বাংলায় উত্তর দাও। সহজ ও সংক্ষিপ্ত ভাষায় কৃষকদের উপযোগী পরামর্শ দাও। কোনো মার্কডাউন ব্যবহার করো না।'
-        : 'You are an expert agricultural assistant for Bangladeshi farmers. Respond clearly in English. Be concise and practical. No markdown formatting.';
+        ? 'You are a helpful farming assistant. Respond ONLY in Bangla. Be very brief.'
+        : 'You are a helpful farming assistant. Respond ONLY in English. Be very brief.';
 
+      console.log("[VoiceAssistant] Calling Gemini model...");
       const result = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `${sys}\n\nUser: ${userText}`,
+        contents: `${sys}\n\nUser: ${userText}`
       });
-
+      
+      console.log("[VoiceAssistant] Received response from Gemini.");
       const aiText = result.text?.trim() || '...';
-      setMessages((prev) => [...prev, {
-        id: Date.now() + '-ai',
-        role: 'assistant',
-        text: aiText,
-        timestamp: new Date(),
-      }]);
+      
+      if (sessionId) {
+        console.log("[VoiceAssistant] Saving AI response to session:", sessionId);
+        await saveVoiceChatMessage(userId, sessionId, 'assistant', aiText);
+      }
       speakText(aiText, voiceLang);
     } catch (err: any) {
+      console.error("[VoiceAssistant] AI Request Failed:", err);
+      let errorMessage = `Error: ${err.message}`;
+      
+      if (err.message?.includes('429') || err.message?.toLowerCase().includes('quota')) {
+        errorMessage = isBn 
+          ? 'দুঃখিত, অনুরোধের মাত্রা অতিক্রম করেছে। দয়া করে কিছুক্ষণ পর আবার চেষ্টা করুন।'
+          : 'Quota exceeded. Please wait a moment before trying again.';
+      }
+
       setMessages((prev) => [...prev, {
         id: Date.now() + '-err',
         role: 'assistant',
-        text: `Error: ${err.message}`,
+        text: errorMessage,
         timestamp: new Date(),
       }]);
     } finally {
       setIsThinking(false);
+      isThinkingRef.current = false;
+      console.log("[VoiceAssistant] Request finished.");
     }
-  }, [isThinking, isBn, isMuted, voiceLang, speakText]);
+  }, [isThinking, isBn, isMuted, voiceLang, speakText, userId, currentSessionId]);
+
+  useEffect(() => {
+    sendToAIRef.current = sendToAI;
+  }, [sendToAI]);
 
 
   // ── Speech Recognition ────────────────────────────────────────────────────
@@ -206,7 +308,10 @@ export default function VoiceAssistant() {
     recognition.continuous = false;
     recognitionRef.current = recognition;
 
-    recognition.onstart = () => { setIsListening(true); setTranscript(''); };
+    recognition.onstart = () => { 
+      setIsListening(true); 
+      setTranscript(''); 
+    };
     recognition.onresult = (event: any) => {
       let interim = '', final = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -214,12 +319,30 @@ export default function VoiceAssistant() {
         if (event.results[i].isFinal) final += t; else interim += t;
       }
       setTranscript(final || interim);
-      if (final) { recognition.stop(); sendToAI(final); }
+      if (final && sendToAIRef.current) { 
+        recognition.stop(); 
+        sendToAIRef.current(final); 
+      }
     };
-    recognition.onerror = () => { setIsListening(false); setTranscript(''); };
+    recognition.onerror = (e: any) => { 
+      console.error("Speech Recognition Error:", e.error);
+      setIsListening(false); 
+      setTranscript(''); 
+      
+      if (e.error === 'not-allowed') {
+        setMessages(prev => [...prev, {
+          id: 'mic-err-' + Date.now(),
+          role: 'assistant',
+          text: isBn 
+            ? 'মাইক্রোফোন ব্যবহারের অনুমতি নেই। দয়া করে ব্রাউজার সেটিংসে মাইক্রোফোন সক্রিয় করুন।' 
+            : 'Microphone permission denied. Please enable microphone access in your browser settings.',
+          timestamp: new Date()
+        }]);
+      }
+    };
     recognition.onend = () => { setIsListening(false); setTranscript(''); };
     recognition.start();
-  }, [micSupported, isListening, voiceLang, sendToAI, stopSpeaking]);
+  }, [micSupported, isListening, voiceLang, stopSpeaking]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
@@ -233,7 +356,7 @@ export default function VoiceAssistant() {
     stopListening();
     const next: 'bn-BD' | 'en-US' = voiceLang === 'bn-BD' ? 'en-US' : 'bn-BD';
     setVoiceLang(next);
-    setMessages([{ id: 'g-' + Date.now(), role: 'assistant', text: GREETINGS[next], timestamp: new Date() }]);
+    // Note: useEffect at line 93 will handle the message reset automatically
   };
 
   const toggleMute = () => {
@@ -243,7 +366,24 @@ export default function VoiceAssistant() {
 
   const clearChat = () => {
     stopSpeaking();
-    setMessages([{ id: 'g-' + Date.now(), role: 'assistant', text: GREETINGS[voiceLang], timestamp: new Date() }]);
+    if (userId && currentSessionId) {
+      deleteVoiceChatSession(userId, currentSessionId);
+      setCurrentSessionId(null);
+    } else {
+      setMessages([{ id: 'g-' + Date.now(), role: 'assistant', text: GREETINGS[voiceLang], timestamp: new Date() }]);
+    }
+  };
+
+  const startNewChat = () => {
+    stopSpeaking();
+    setCurrentSessionId(null);
+    setIsSidebarOpen(false);
+  };
+
+  const selectSession = (sid: string) => {
+    stopSpeaking();
+    setCurrentSessionId(sid);
+    setIsSidebarOpen(false);
   };
 
   const handleTextSend = (e: React.FormEvent) => {
@@ -255,161 +395,215 @@ export default function VoiceAssistant() {
 
   const formatTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const micStatus = !micSupported
-    ? (isBn ? 'মাইক্রোফোন সমর্থিত নয়' : 'Microphone not supported')
-    : isListening
-    ? (isBn ? 'শুনছি... থামাতে আবার চাপুন' : 'Listening... tap again to stop')
-    : isSpeaking
-    ? (isBn ? 'বলছি...' : 'Speaking...')
-    : (isBn ? 'মাইক চেপে বাংলায় কথা বলুন' : 'Tap mic and speak in English');
-
   return (
     <Layout title={isBn ? 'কৃষি এআই সহকারী' : 'Agri AI Assistant'} showBack hideLangToggle>
-      <div className="flex flex-col px-4" style={{ height: 'calc(100vh - 5rem)' }}>
-
-        {/* ── Top Bar ─────────────────────────────────────────── */}
-        <div className="flex items-center justify-between py-2.5 mb-1 border-b border-outline-variant/20">
-          {/* Single language toggle */}
-          <button
-            id="va-lang-toggle"
-            onClick={toggleLang}
-            className="flex items-center gap-2 bg-surface-container-high hover:bg-surface-container px-3 py-2 rounded-xl transition-all group"
-          >
-            <Languages className="w-4 h-4 text-primary" />
-            <span className="text-sm font-bold text-on-surface">{isBn ? 'বাংলা' : 'English'}</span>
-            <span className="text-[10px] text-on-surface-variant bg-outline-variant/30 px-2 py-0.5 rounded-md">
-              → {isBn ? 'English' : 'বাংলা'}
-            </span>
-          </button>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={toggleMute}
-              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${isMuted ? 'bg-error/10 text-error' : 'bg-surface-container-high text-on-surface-variant hover:text-primary'}`}
-            >
-              {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={clearChat}
-              className="w-9 h-9 rounded-xl bg-surface-container-high text-on-surface-variant hover:text-error flex items-center justify-center transition-all"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* ── Bengali voice warning ─────────────────────────── */}
-        {isBn && bnVoiceAvailable === false && (
-          <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 my-1">
-            <Info className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-            <p className="text-[11px] text-amber-700 leading-relaxed">
-              বাংলা ভয়েস পাওয়া যায়নি। Windows Settings → Time &amp; Language → Language → বাংলা যোগ করুন।
-              টেক্সট দেখা যাবে, কিন্তু শব্দ নাও শোনা যেতে পারে।
-            </p>
-          </div>
-        )}
-        {isBn && bnVoiceAvailable === true && (
-          <p className="text-[10px] text-green-600 text-center py-0.5">✓ {isBn ? 'বাংলা ভয়েস সক্রিয়' : 'Bengali voice active'}</p>
-        )}
-
-        {/* ── Messages ─────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto space-y-3 py-3 pr-1">
-          <AnimatePresence initial={false}>
-            {messages.map((msg) => (
+      <div className="flex relative overflow-hidden" style={{ height: 'calc(100vh - 5rem)' }}>
+        
+        {/* ── Sidebar ────────────────────────────────────────── */}
+        <AnimatePresence>
+          {isSidebarOpen && (
+            <>
               <motion.div
-                key={msg.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                onClick={() => setIsSidebarOpen(false)}
+                className="absolute inset-0 bg-black/40 z-40 backdrop-blur-sm sm:hidden"
+              />
+              <motion.aside
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="absolute left-0 top-0 bottom-0 w-72 bg-surface-container-high z-50 shadow-2xl border-r border-outline-variant/20 flex flex-col"
               >
-                {msg.role === 'assistant' && (
-                  <div className="w-8 h-8 shrink-0 rounded-full bg-primary flex items-center justify-center mt-auto">
+                <div className="p-4 border-b border-outline-variant/20 flex items-center justify-between">
+                  <h3 className="font-headline font-bold text-on-surface flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-primary" />
+                    {isBn ? 'চ্যাট ইতিহাস' : 'Chat History'}
+                  </h3>
+                  <button onClick={() => setIsSidebarOpen(false)} className="p-2 hover:bg-surface-container rounded-lg">
+                    <X className="w-5 h-5 text-on-surface-variant" />
+                  </button>
+                </div>
+
+                <div className="p-3">
+                  <button
+                    onClick={startNewChat}
+                    className="w-full flex items-center gap-3 bg-primary text-white p-3 rounded-2xl font-bold text-sm shadow-lg hover:brightness-110 active:scale-[0.98] transition-all"
+                  >
+                    <PlusCircle className="w-5 h-5" />
+                    {isBn ? 'নতুন চ্যাট শুরু করুন' : 'Start New Chat'}
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                  {sessions.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-40 text-center px-4">
+                      <p className="text-xs text-on-surface-variant font-medium">
+                        {isBn ? 'কোনো পূর্ববর্তী চ্যাট নেই' : 'No previous chats found'}
+                      </p>
+                    </div>
+                  ) : (
+                    sessions.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => selectSession(s.id)}
+                        className={`w-full text-left p-4 rounded-2xl transition-all border ${
+                          currentSessionId === s.id
+                            ? 'bg-primary/10 border-primary shadow-sm'
+                            : 'bg-surface hover:bg-surface-container-low border-transparent'
+                        }`}
+                      >
+                        <p className="font-bold text-sm text-on-surface truncate">{s.title || (isBn ? 'নতুন আলাপ' : 'New Chat')}</p>
+                        <p className="text-[10px] text-on-surface-variant line-clamp-1 mt-0.5">{s.lastMessage || '...'}</p>
+                        <p className="text-[9px] text-on-surface-variant/40 mt-1">
+                          {s.updatedAt?.toDate ? s.updatedAt.toDate().toLocaleDateString() : 'Just now'}
+                        </p>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
+
+        <div className="flex-1 flex flex-col px-4">
+
+          {/* ── Top Bar ─────────────────────────────────────────── */}
+          <div className="flex items-center justify-between py-2.5 mb-1 border-b border-outline-variant/20">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="w-10 h-10 flex items-center justify-center bg-surface-container-high rounded-xl text-primary shadow-sm hover:bg-surface-container transition-colors"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              
+              <button
+                id="va-lang-toggle"
+                onClick={toggleLang}
+                className="flex items-center gap-2 bg-surface-container-high hover:bg-surface-container px-3 py-2 rounded-xl transition-all group"
+              >
+                <Languages className="w-4 h-4 text-primary" />
+                <span className="text-sm font-bold text-on-surface">{isBn ? 'বাংলা' : 'English'}</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={toggleMute}
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${isMuted ? 'bg-error/10 text-error' : 'bg-surface-container-high text-on-surface-variant hover:text-primary'}`}
+              >
+                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={clearChat}
+                className="w-9 h-9 rounded-xl bg-surface-container-high text-on-surface-variant hover:text-error flex items-center justify-center transition-all"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* ── Messages Area ─────────────────────────────────── */}
+          <div className="flex-1 overflow-y-auto space-y-3 py-3 pr-1">
+            <AnimatePresence initial={false}>
+              {messages.map((msg) => (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  {msg.role === 'assistant' && (
+                    <div className="w-8 h-8 shrink-0 rounded-full bg-primary flex items-center justify-center mt-auto">
+                      <Sprout className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  <div className={`max-w-[78%] flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                    <div className={`px-4 py-3 text-sm leading-relaxed ${
+                      msg.role === 'user'
+                        ? 'bg-primary text-white rounded-2xl rounded-br-sm shadow-sm'
+                        : 'bg-surface-container-high text-on-surface rounded-2xl rounded-bl-sm shadow-sm'
+                    }`}>
+                      {msg.text}
+                    </div>
+                    <span className="text-[10px] text-on-surface-variant/40 px-1">{formatTime(msg.timestamp)}</span>
+                  </div>
+                  {msg.role === 'user' && (
+                    <div className="w-8 h-8 shrink-0 rounded-full bg-secondary flex items-center justify-center mt-auto text-xs font-black text-white">
+                      {isBn ? 'আ' : 'U'}
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {/* Thinking dots */}
+            <AnimatePresence>
+              {isThinking && (
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex gap-2.5 justify-start">
+                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
                     <Sprout className="w-4 h-4 text-white" />
                   </div>
-                )}
-                <div className={`max-w-[78%] flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                  <div className={`px-4 py-3 text-sm leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'bg-primary text-white rounded-2xl rounded-br-sm shadow-sm'
-                      : 'bg-surface-container-high text-on-surface rounded-2xl rounded-bl-sm shadow-sm'
-                  }`}>
-                    {msg.text}
+                  <div className="bg-surface-container-high px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-2 shadow-sm">
+                    {[0, 1, 2].map((i) => (
+                      <motion.span key={i} className="w-2 h-2 bg-primary/60 rounded-full" animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.75, delay: i * 0.15 }} />
+                    ))}
+                    <span className="text-xs text-on-surface-variant ml-1">{isBn ? 'চিন্তা করছি...' : 'Thinking...'}</span>
                   </div>
-                  <span className="text-[10px] text-on-surface-variant/40 px-1">{formatTime(msg.timestamp)}</span>
-                </div>
-                {msg.role === 'user' && (
-                  <div className="w-8 h-8 shrink-0 rounded-full bg-secondary flex items-center justify-center mt-auto text-xs font-black text-white">
-                    {isBn ? 'আ' : 'U'}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Live transcript */}
+            <AnimatePresence>
+              {isListening && transcript && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-end">
+                  <div className="bg-primary/15 text-primary px-4 py-2 rounded-2xl rounded-br-sm text-sm italic max-w-[78%]">
+                    {transcript}…
                   </div>
-                )}
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-          {/* Thinking dots */}
-          <AnimatePresence>
-            {isThinking && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex gap-2.5 justify-start">
-                <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                  <Sprout className="w-4 h-4 text-white" />
-                </div>
-                <div className="bg-surface-container-high px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-2 shadow-sm">
-                  {[0, 1, 2].map((i) => (
-                    <motion.span key={i} className="w-2 h-2 bg-primary/60 rounded-full" animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.75, delay: i * 0.15 }} />
-                  ))}
-                  <span className="text-xs text-on-surface-variant ml-1">{isBn ? 'চিন্তা করছি...' : 'Thinking...'}</span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Live transcript */}
-          <AnimatePresence>
-            {isListening && transcript && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex justify-end">
-                <div className="bg-primary/15 text-primary px-4 py-2 rounded-2xl rounded-br-sm text-sm italic max-w-[78%]">
-                  {transcript}…
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* ── Mic Button ────────────────────────────────────── */}
-        <div className="flex flex-col items-center gap-2 py-4">
-          <div className="relative flex items-center justify-center w-20 h-20">
-            {isListening && [1, 2, 3].map((r) => (
-              <motion.div key={r} className="absolute rounded-full border-2 border-error/40"
-                animate={{ width: [80, 80 + r * 30], height: [80, 80 + r * 30], opacity: [0.7, 0] }}
-                transition={{ repeat: Infinity, duration: 1.6, delay: r * 0.25, ease: 'easeOut' }} />
-            ))}
-            {isSpeaking && [1, 2].map((r) => (
-              <motion.div key={'sp' + r} className="absolute rounded-full border-2 border-secondary/40"
-                animate={{ width: [80, 80 + r * 26], height: [80, 80 + r * 26], opacity: [0.6, 0] }}
-                transition={{ repeat: Infinity, duration: 1.2, delay: r * 0.2, ease: 'easeOut' }} />
-            ))}
-            <motion.button
-              id="va-mic-button"
-              onClick={isListening ? stopListening : startListening}
-              disabled={!micSupported}
-              whileTap={{ scale: 0.9 }}
-              animate={isListening ? { scale: [1, 1.05, 1] } : {}}
-              transition={isListening ? { repeat: Infinity, duration: 1.2 } : {}}
-              className={`w-[72px] h-[72px] rounded-full z-10 flex items-center justify-center shadow-2xl transition-colors ${
-                isListening ? 'bg-error text-white'
-                : isSpeaking ? 'bg-secondary text-white'
-                : 'bg-primary text-white hover:brightness-110'
-              } ${!micSupported ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
-            >
-              {isListening ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
-            </motion.button>
+            <div ref={messagesEndRef} />
           </div>
-          <p className="text-xs font-semibold text-on-surface-variant text-center">{micStatus}</p>
-        </div>
+
+          {/* ── Footer / Mic Area ─────────────────────────────── */}
+          <div className="flex flex-col items-center gap-2 py-4">
+            <div className="relative flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20">
+              {isListening && [1, 2, 3].map((r) => (
+                <motion.div key={r} className="absolute rounded-full border-2 border-error/40"
+                  animate={{ width: [60, 60 + r * 30], height: [60, 60 + r * 30], opacity: [0.7, 0] }}
+                  transition={{ repeat: Infinity, duration: 1.6, delay: r * 0.25, ease: 'easeOut' }} />
+              ))}
+              <motion.button
+                id="va-mic-button"
+                onClick={isListening ? stopListening : startListening}
+                disabled={!micSupported}
+                whileTap={{ scale: 0.9 }}
+                className={`w-14 h-14 sm:w-[72px] sm:h-[72px] rounded-full z-10 flex items-center justify-center shadow-2xl transition-colors ${
+                  isListening ? 'bg-error text-white' : isSpeaking ? 'bg-secondary text-white' : 'bg-primary text-white hover:brightness-110'
+                } ${!micSupported ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+              >
+                {isListening ? <MicOff className="w-6 h-6 sm:w-7 sm:h-7" /> : <Mic className="w-6 h-6 sm:w-7 sm:h-7" />}
+              </motion.button>
+            </div>
+            <p className="text-xs font-semibold text-on-surface-variant text-center">
+              {!micSupported
+                ? (isBn ? 'মাইক্রোফোন সমর্থিত নয়' : 'Microphone not supported')
+                : isListening
+                ? (isBn ? 'শুনছি... থামাতে আবার চাপুন' : 'Listening... tap again to stop')
+                : isSpeaking
+                ? (isBn ? 'বলছি...' : 'Speaking...')
+                : (isBn ? 'মাইক চেপে বাংলায় কথা বলুন' : 'Tap mic and speak in English')}
+            </p>
+          </div>
 
         {/* ── Text Input ─────────────────────────────────────── */}
         <form onSubmit={handleTextSend} className="flex gap-2 pb-3">
@@ -431,6 +625,7 @@ export default function VoiceAssistant() {
           </button>
         </form>
       </div>
-    </Layout>
+    </div>
+  </Layout>
   );
 }

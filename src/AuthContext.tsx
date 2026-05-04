@@ -9,6 +9,8 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   logout: () => Promise<void>;
+  updateUserProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  updateUserSettings: (updates: Partial<UserSettings>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -16,6 +18,8 @@ const AuthContext = createContext<AuthContextType>({
   userProfile: null,
   loading: true,
   logout: async () => {},
+  updateUserProfile: async () => {},
+  updateUserSettings: async () => {},
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -88,9 +92,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => signOut(auth);
 
+  const updateUserProfile = async (updates: Partial<UserProfile>) => {
+    if (!currentUser) return;
+    const userDocRef = doc(db, 'users', currentUser.uid);
+    await updateDoc(userDocRef, updates);
+    setUserProfile(prev => prev ? { ...prev, ...updates } : null);
+  };
+
+  const updateUserSettings = async (updates: Partial<UserSettings>) => {
+    if (!currentUser) return;
+    const settingsDocRef = doc(db, `users/${currentUser.uid}/settings/profile`);
+    await setDoc(settingsDocRef, updates, { merge: true });
+  };
+
   return (
     // Always render children — loading state is handled per-screen
-    <AuthContext.Provider value={{ currentUser, userProfile, loading, logout }}>
+    <AuthContext.Provider value={{ 
+      currentUser, 
+      userProfile, 
+      loading, 
+      logout,
+      updateUserProfile,
+      updateUserSettings
+    }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,6 +1,11 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { 
+  initializeFirestore, 
+  getFirestore,
+  persistentLocalCache, 
+  persistentMultipleTabManager 
+} from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -26,6 +31,22 @@ if (missing.length > 0) {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Fix for FIRESTORE INTERNAL ASSERTION FAILED (ID: b815 / Unexpected state)
+// Wrap in try-catch to prevent double-initialization during Vite HMR
+let firestoreDb;
+try {
+  firestoreDb = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  });
+} catch (err) {
+  // If already initialized, get the existing instance
+  firestoreDb = getFirestore(app);
+}
+
+export const db = firestoreDb;
+
 export const googleProvider = new GoogleAuthProvider();
 export default app;
