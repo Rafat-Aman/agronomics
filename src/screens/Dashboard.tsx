@@ -42,6 +42,7 @@ import { motion, AnimatePresence } from 'motion/react';
 // --- Farm Stats Card ---
 function FarmStats({ fields }: { fields: Field[] }) {
   const { t } = useApp();
+  const navigate = useNavigate();
   const total = fields.length;
   const active = fields.filter(f => f.active_crop).length;
   const alerts = fields.filter(f => f.health_status === 'critical' || f.health_status === 'attention_needed').length;
@@ -49,11 +50,18 @@ function FarmStats({ fields }: { fields: Field[] }) {
   return (
     <section className="grid grid-cols-3 gap-3">
       {[
-        { label: t('totalFields'), value: total, icon: MapIcon, color: 'text-secondary bg-secondary/10' },
-        { label: t('activeCrops'), value: active, icon: Sprout, color: 'text-primary bg-primary/10' },
+        { label: t('totalFields'), value: total, icon: MapIcon, color: 'text-secondary bg-secondary/10', path: '/fields' },
+        { label: t('activeCrops'), value: active, icon: Sprout, color: 'text-primary bg-primary/10', path: '/my-crops' },
         { label: t('healthAlerts'), value: alerts, icon: AlertCircle, color: alerts > 0 ? 'text-red-500 bg-red-100' : 'text-green-600 bg-green-100' },
       ].map(stat => (
-        <div key={stat.label} className="bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/10 flex flex-col items-center gap-2 shadow-sm">
+        <div
+          key={stat.label}
+          onClick={() => stat.path && navigate(stat.path)}
+          className={cn(
+            "bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/10 flex flex-col items-center gap-2 shadow-sm transition-all duration-200",
+            stat.path && "cursor-pointer hover:border-primary/30 hover:shadow-md active:scale-95"
+          )}
+        >
           <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', stat.color)}>
             <stat.icon className="w-4 h-4" />
           </div>
