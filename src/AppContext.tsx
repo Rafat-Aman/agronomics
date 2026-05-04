@@ -1,5 +1,8 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { Language } from './types';
+import { useAuth } from './AuthContext';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from './lib/firebase';
 
 interface AppContextType {
   language: Language;
@@ -154,7 +157,74 @@ const translations = {
     savedToHistory: '\u2713 Saved to your recommendation history',
     noRecommendations: 'No recommendations yet',
     generateFirst: 'Generate your first crop recommendation.',
-    getStartedBtn: 'Get Started'
+    getStartedBtn: 'Get Started',
+    // Dashboard
+    totalFields: 'Total Fields', activeCrops: 'Active Crops', healthAlerts: 'Alerts',
+    dailyAiInsight: 'Daily AI Insight', generatingGuide: 'Generating AI Daily Guide...',
+    goodMorning: 'Good Morning', goodAfternoon: 'Good Afternoon', goodEvening: 'Good Evening',
+    farmOverview: 'Farm Overview', recentActivity: 'Recent Activity', viewAll: 'View All',
+    addField: 'Add Field', noActivity: 'No recent activity',
+    // Map controls
+    streetView: '🗺 Street', topoView: '⛰ Topo', satelliteView: '🛰 Satellite',
+    osmAttribution: '© OpenStreetMap contributors',
+    // Field Detail Panel
+    activeCropLabel: 'Active Crop', noActiveCrop: 'No active crop set',
+    getAiCropRec: 'Get AI Crop Recommendation',
+    viewRoadmap: 'View Roadmap', hideRoadmap: 'Hide Roadmap',
+    cultivationRoadmap: 'Cultivation Roadmap', viewFullRoadmap: 'View Full Roadmap Screen',
+    generatingRoadmap: 'Generating roadmap…', roadmapError: 'Could not generate roadmap. Try again.',
+    roadmapProgress: 'Progress', phases: 'phases',
+    soilPh: 'Soil pH', gpsPoints: 'GPS Points', soilTypeLabel2: 'Soil Type',
+    updateFieldHealth: 'Update Field Health', renameField: 'Rename Field',
+    loadAiRoadmap: 'Load AI Cultivation Roadmap',
+    deleteField: 'Delete Field', cropRecommendation: 'Crop Recommendation',
+    scanDisease: 'Scan for Disease', gpsMapped: 'GPS Mapped', simpleLabel: 'Simple Mode',
+    // Add Field flow
+    chooseMode: 'Choose mapping mode',
+    gpsModeTitle: 'GPS Walk Mode', gpsModeDesc: 'Walk your field boundary and tap to mark points',
+    simpleModeTitle: 'Simple Mode', simpleModeDesc: 'One GPS point + enter area manually',
+    markPoint: 'Mark Point', doneReview: 'Done — Review Field',
+    calcAreaLabel: 'Calculated Area', correctionLabel: 'Area Correction (optional)',
+    actualArea: 'Actual measured area', applyFix: 'Apply Fix',
+    correctionNote: 'If the calculated area differs from your records, enter the correct value to rescale.',
+    cancel: 'Cancel', saveField: 'Save Field', saving: 'Saving…',
+    fieldNamePlaceholder: 'Field name (required)', backToMarking: '← Back to marking',
+    addNewField: 'Add New Field', noFieldsYet: 'No fields yet', addFirstFieldHint: 'Add your first field above',
+    // Knowledge Center
+    askAiTab: 'Ask AI', pestCalendarTab: 'Pest Calendar', quickGuidesTab: 'Quick Guides',
+    infoHub: 'Information Hub', expertKnowledge: 'Expert Knowledge',
+    expertKnowledgeDesc: 'Ask AI questions, track seasonal pests, and access farming best practices.',
+    getCropRecBtn: 'Get Crop Recommendations', tryNow: 'Try Now',
+    askAiTitle: 'Ask the AI Agronomist', askAiDesc: 'Get expert answers in Bengali or English',
+    typeQuestion: 'Type your farming question…',
+    pestCalendarTitle: 'Seasonal Pest Calendar',
+    pestCalendarDesc: 'Bangladesh crop calendar — tap a month to expand threats',
+    watchPests: '⚠️ Watch for Pests', activecropsLabel: '🌾 Active Crops', current: 'Current',
+    quickGuidesTitle: 'Farming Quick Guides', quickGuidesDesc: 'Best practices every Bangladeshi farmer should know',
+    fullLibrary: 'Full Farming Guides Library', readTime: '5–15 min reads',
+    aiPowered: 'AI Powered',
+    // Guide Detail
+    todaysGoal: "Today's Essential Goal", detailedSteps: 'Detailed Steps for Success',
+    proTipTitle: "Agronomist's Pro Tip", seasonLabel2: 'Season', focusLabel: 'Focus',
+    minRead: '5 min read', saveGuide: 'Save Guide', share: 'Share',
+    savedConfirm: 'Saved!', copiedConfirm: 'Copied!',
+    askAgronomist: 'Ask the AI Agronomist', aiAnswerLabel: 'AI Agronomist Answer',
+    returnDashboard: 'Return to Dashboard', noGuideSelected: 'No guide selected.',
+    generateFresh: 'Generate fresh version', backToDashboard: 'Dashboard',
+    knowledgeCenterBtn: 'Knowledge Center', relatedQuestions: 'Related Questions',
+    // Disease Detection
+    uploadOrCapture: 'Upload or Capture', analyzingImage: 'Analyzing image…',
+    diagnosisResult: 'Diagnosis Result', treatmentPlan: 'Treatment Plan',
+    severityLabel: 'Severity', preventionTips: 'Prevention Tips',
+    saveHealthReport: 'Save Health Report to Field', selectFieldLabel: 'Select Field',
+    saveReport: 'Save Report', scanAnother: 'Scan Another',
+    // Crop Roadmap
+    activateRoadmap: 'Activate Roadmap', syncedToField: 'Synced to Field',
+    syncingRoadmap: 'Syncing…', roadmapFor: 'Cultivation Roadmap for',
+    generatingRoadmapFull: 'Generating your roadmap…',
+    // Health statuses
+    healthHealthy: 'Healthy', healthAttention: 'Attention Needed',
+    healthCritical: 'Critical', healthUnknown: 'Unknown',
   },
   bn: {
     appName: 'ডিজিটাল কৃষিবিদ',
@@ -302,14 +372,106 @@ const translations = {
     savedToHistory: '\u2713 সুপারিশ ইতিহাসে সংরক্ষিত হয়েছে',
     noRecommendations: 'এখনও কোনো সুপারিশ নেই',
     generateFirst: 'আপনার প্রথম ফসল সুপারিশ তৈরি করুন।',
-    getStartedBtn: 'শুরু করুন'
+    getStartedBtn: 'শুরু করুন',
+    // Dashboard
+    totalFields: 'মোট জমি', activeCrops: 'সক্রিয় ফসল', healthAlerts: 'সতর্কতা',
+    dailyAiInsight: 'দৈনিক এআই গাইড', generatingGuide: 'এআই গাইড তৈরি হচ্ছে...',
+    goodMorning: 'শুভ সকাল', goodAfternoon: 'শুভ দুপুর', goodEvening: 'শুভ সন্ধ্যা',
+    farmOverview: 'খামারের সারসংক্ষেপ', recentActivity: 'সাম্প্রতিক কার্যক্রম', viewAll: 'সব দেখুন',
+    addField: 'জমি যোগ করুন', noActivity: 'কোনো সাম্প্রতিক কার্যক্রম নেই',
+    // Map controls
+    streetView: '🗺 মানচিত্র', topoView: '⛰ ভূখণ্ড', satelliteView: '🛰 স্যাটেলাইট',
+    osmAttribution: '© OpenStreetMap অবদানকারী',
+    // Field Detail Panel
+    activeCropLabel: 'সক্রিয় ফসল', noActiveCrop: 'কোনো সক্রিয় ফসল নেই',
+    getAiCropRec: 'এআই ফসল সুপারিশ নিন',
+    viewRoadmap: 'রোডম্যাপ দেখুন', hideRoadmap: 'রোডম্যাপ লুকান',
+    cultivationRoadmap: 'চাষ পরিকল্পনা', viewFullRoadmap: 'পূর্ণ রোডম্যাপ দেখুন',
+    generatingRoadmap: 'রোডম্যাপ তৈরি হচ্ছে…', roadmapError: 'রোডম্যাপ তৈরি করা যায়নি। আবার চেষ্টা করুন।',
+    roadmapProgress: 'অগ্রগতি', phases: 'ধাপ',
+    soilPh: 'মাটির pH', gpsPoints: 'জিপিএস পয়েন্ট', soilTypeLabel2: 'মাটির ধরন',
+    updateFieldHealth: 'জমির স্বাস্থ্য আপডেট করুন', renameField: 'জমির নাম পরিবর্তন',
+    loadAiRoadmap: 'এআই চাষ পরিকল্পনা লোড করুন',
+    deleteField: 'জমি মুছুন', cropRecommendation: 'ফসল সুপারিশ',
+    scanDisease: 'রোগ স্ক্যান করুন', gpsMapped: 'জিপিএস ম্যাপড', simpleLabel: 'সাধারণ মোড',
+    // Add Field flow
+    chooseMode: 'ম্যাপিং পদ্ধতি বেছে নিন',
+    gpsModeTitle: 'জিপিএস ওয়াক মোড', gpsModeDesc: 'জমির সীমানা বরাবর হেঁটে পয়েন্ট চিহ্নিত করুন',
+    simpleModeTitle: 'সাধারণ মোড', simpleModeDesc: 'একটি জিপিএস পয়েন্ট + ম্যানুয়ালি জমির পরিমাণ লিখুন',
+    markPoint: 'পয়েন্ট চিহ্নিত করুন', doneReview: 'সম্পন্ন — জমি পর্যালোচনা',
+    calcAreaLabel: 'হিসাবকৃত জমির পরিমাণ', correctionLabel: 'জমির সংশোধন (ঐচ্ছিক)',
+    actualArea: 'প্রকৃত পরিমাণ', applyFix: 'সংশোধন করুন',
+    correctionNote: 'যদি হিসাবকৃত পরিমাণ ভুল হয়, সঠিক মান লিখুন।',
+    cancel: 'বাতিল', saveField: 'জমি সংরক্ষণ করুন', saving: 'সংরক্ষণ হচ্ছে…',
+    fieldNamePlaceholder: 'জমির নাম (আবশ্যক)', backToMarking: '← পয়েন্ট চিহ্নিতকরণে ফিরুন',
+    addNewField: 'নতুন জমি যোগ করুন', noFieldsYet: 'এখনো কোনো জমি নেই', addFirstFieldHint: 'উপরে প্রথম জমি যোগ করুন',
+    // Knowledge Center
+    askAiTab: 'এআই জিজ্ঞাসা', pestCalendarTab: 'পোকার ক্যালেন্ডার', quickGuidesTab: 'দ্রুত গাইড',
+    infoHub: 'তথ্য কেন্দ্র', expertKnowledge: 'বিশেষজ্ঞ জ্ঞান',
+    expertKnowledgeDesc: 'এআইকে প্রশ্ন করুন, মৌসুমি পোকা ট্র্যাক করুন এবং কৃষি পদ্ধতি জানুন।',
+    getCropRecBtn: 'ফসল সুপারিশ নিন', tryNow: 'এখনই চেষ্টা করুন',
+    askAiTitle: 'এআই কৃষিবিদকে জিজ্ঞাসা করুন', askAiDesc: 'বাংলা বা ইংরেজিতে বিশেষজ্ঞ উত্তর পান',
+    typeQuestion: 'আপনার কৃষি প্রশ্ন লিখুন…',
+    pestCalendarTitle: 'মৌসুমি পোকার ক্যালেন্ডার',
+    pestCalendarDesc: 'বাংলাদেশ ফসল ক্যালেন্ডার — মাস ট্যাপ করুন',
+    watchPests: '⚠️ পোকার সতর্কতা', activecropsLabel: '🌾 সক্রিয় ফসল', current: 'চলতি',
+    quickGuidesTitle: 'কৃষি দ্রুত গাইড', quickGuidesDesc: 'প্রতিটি বাংলাদেশী কৃষকের জানা উচিত',
+    fullLibrary: 'সম্পূর্ণ কৃষি গাইড লাইব্রেরি', readTime: '৫-১৫ মিনিটের পড়া',
+    aiPowered: 'এআই চালিত',
+    // Guide Detail
+    todaysGoal: 'আজকের প্রধান লক্ষ্য', detailedSteps: 'সাফল্যের বিস্তারিত ধাপ',
+    proTipTitle: 'কৃষিবিদের বিশেষ পরামর্শ', seasonLabel2: 'মৌসুম', focusLabel: 'মনোযোগ',
+    minRead: '৫ মিনিটের পড়া', saveGuide: 'গাইড সংরক্ষণ', share: 'শেয়ার করুন',
+    savedConfirm: 'সংরক্ষিত!', copiedConfirm: 'কপি হয়েছে!',
+    askAgronomist: 'এআই কৃষিবিদকে জিজ্ঞাসা করুন', aiAnswerLabel: 'এআই কৃষিবিদের উত্তর',
+    returnDashboard: 'ড্যাশবোর্ডে ফিরুন', noGuideSelected: 'কোনো গাইড নির্বাচিত হয়নি।',
+    generateFresh: 'নতুন সংস্করণ তৈরি করুন', backToDashboard: 'ড্যাশবোর্ড',
+    knowledgeCenterBtn: 'তথ্য কেন্দ্র', relatedQuestions: 'সম্পর্কিত প্রশ্ন',
+    // Disease Detection
+    uploadOrCapture: 'ছবি আপলোড বা তোলা', analyzingImage: 'ছবি বিশ্লেষণ হচ্ছে…',
+    diagnosisResult: 'রোগ নির্ণয়ের ফলাফল', treatmentPlan: 'চিকিৎসা পরিকল্পনা',
+    severityLabel: 'তীব্রতা', preventionTips: 'প্রতিরোধের পরামর্শ',
+    saveHealthReport: 'জমিতে স্বাস্থ্য রিপোর্ট সংরক্ষণ', selectFieldLabel: 'জমি নির্বাচন করুন',
+    saveReport: 'রিপোর্ট সংরক্ষণ', scanAnother: 'আরেকটি স্ক্যান করুন',
+    // Crop Roadmap
+    activateRoadmap: 'রোডম্যাপ সক্রিয় করুন', syncedToField: 'জমিতে সিঙ্ক হয়েছে',
+    syncingRoadmap: 'সিঙ্ক হচ্ছে…', roadmapFor: 'চাষ পরিকল্পনা:',
+    generatingRoadmapFull: 'আপনার রোডম্যাপ তৈরি হচ্ছে…',
+    // Health statuses
+    healthHealthy: 'সুস্থ', healthAttention: 'মনোযোগ প্রয়োজন',
+    healthCritical: 'জরুরি অবস্থা', healthUnknown: 'অজানা',
   }
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguage] = useState<Language>('bn');
+  const { currentUser, updateUserSettings } = useAuth();
+  const [language, setLanguageState] = useState<Language>('bn');
+
+  // Load language from Firestore when user is logged in
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const settingsDocRef = doc(db, `users/${currentUser.uid}/settings/profile`);
+    const unsubscribe = onSnapshot(settingsDocRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.language) {
+          setLanguageState(data.language as Language);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang);
+    if (currentUser) {
+      updateUserSettings({ language: lang });
+    }
+  };
 
   const t = (key: string) => {
     return translations[language][key as keyof typeof translations['en']] || key;

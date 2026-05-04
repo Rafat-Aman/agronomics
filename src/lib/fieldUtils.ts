@@ -184,8 +184,8 @@ export function tileToLatLng(x: number, y: number, zoom: number = TILE_ZOOM): La
  * Given a center lat/lng, compute the 3×3 grid of tiles that should be rendered
  * and the bounding box of the entire 3×3 tile grid.
  */
-export function getTileGrid(centerLat: number, centerLng: number) {
-  const center = latLngToTile(centerLat, centerLng, TILE_ZOOM);
+export function getTileGrid(centerLat: number, centerLng: number, zoom: number = TILE_ZOOM) {
+  const center = latLngToTile(centerLat, centerLng, zoom);
   const tiles: Array<{ tx: number; ty: number; url: string; offsetX: number; offsetY: number }> = [];
 
   for (let dy = -1; dy <= 1; dy++) {
@@ -195,7 +195,7 @@ export function getTileGrid(centerLat: number, centerLng: number) {
       tiles.push({
         tx,
         ty,
-        url: `https://tile.openstreetmap.org/${TILE_ZOOM}/${tx}/${ty}.png`,
+        url: `https://tile.openstreetmap.org/${zoom}/${tx}/${ty}.png`,
         offsetX: (dx + 1) * TILE_SIZE,
         offsetY: (dy + 1) * TILE_SIZE,
       });
@@ -203,8 +203,8 @@ export function getTileGrid(centerLat: number, centerLng: number) {
   }
 
   // Bounds of the 3×3 tile grid (NW corner of top-left tile, SE corner of bottom-right tile)
-  const nw = tileToLatLng(center.x - 1, center.y - 1, TILE_ZOOM);
-  const se = tileToLatLng(center.x + 2, center.y + 2, TILE_ZOOM);
+  const nw = tileToLatLng(center.x - 1, center.y - 1, zoom);
+  const se = tileToLatLng(center.x + 2, center.y + 2, zoom);
 
   const bounds: MapBounds = {
     north: nw.lat,

@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../AppContext';
 import { useAuth } from '../AuthContext';
 import Layout from '../components/Layout';
 import { motion, AnimatePresence } from 'motion/react';
-import { MapPin, Plus, Trash2, Edit2, CheckCircle, XCircle, Navigation, Undo2, Save, AlertCircle } from 'lucide-react';
+import { MapPin, Plus, Trash2, Edit2, CheckCircle, XCircle, Navigation, Undo2, Save,
+  AlertCircle, TrendingUp, ScanLine, Leaf, ChevronRight, Clock, Droplets,
+  FlaskConical, CheckSquare, Square, RefreshCw, Map as MapIcon, Activity,
+} from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
   smoothGpsPoint, calculatePolygonArea, computeCentroid, scalePolygon,
@@ -12,66 +16,548 @@ import {
   type LatLng, type MapBounds,
 } from '../lib/fieldUtils';
 import { saveFieldWithPolygon, updateField, deleteField, getUserFields } from '../lib/db';
+import { GoogleGenAI } from '@google/genai';
 import type { Field } from '../types';
-
-// CartoDB tiles — free, no API key, no referrer restriction
-const TILE_URL = (z: number, x: number, y: number) =>
-  `https://a.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`;
 
 type Mode = 'list' | 'add-choose' | 'polygon-walk' | 'polygon-review' | 'simple' | 'detail';
 
-function MapCanvas({ center, points, fields, selectedId, onSelectField }: {
-  center: LatLng; points: LatLng[]; fields: Field[];
-  selectedId?: string; onSelectField?: (f: Field) => void;
+interface RoadmapPhase {
+  phaseName: string;
+  duration: string;
+  tasks: string[];
+  tips: string;
+}
+
+// ── Field Detail Panel (full professional view) ──────────────────────────────
+function FieldDetailPanel({
+  selected, uid, editName, setEditName, handleSaveEdit, handleDelete, navigate, onClose, onFieldUpdate
+}: {
+  selected: Field;
+  uid: string;
+  editName: string;
+  setEditName: (v: string) => void;
+  handleSaveEdit: () => void;
+  handleDelete: (f: Field) => void;
+  navigate: (path: string) => void;
+  onClose: () => void;
+  onFieldUpdate: (updates: Partial<Field>) => void;
 }) {
-  const { tiles, bounds, gridSize } = getTileGrid(center.lat, center.lng);
+  const { t } = useApp();
+  const inputCls = "w-full bg-surface-container-low rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/30 border border-outline-variant/20";
+
+  // Roadmap state
+  const [roadmap, setRoadmap] = useState<RoadmapPhase[] | null>(null);
+  const [roadmapLoading, setRoadmapLoading] = useState(false);
+  const [roadmapError, setRoadmapError] = useState<string | null>(null);
+  const [completedPhases, setCompletedPhases] = useState<Set<number>>(new Set());
+  const [showRoadmap, setShowRoadmap] = useState(false);
+
+  // Health status update
+  const [healthStatus, setHealthStatus] = useState(selected.health_status || 'unknown');
+  const [updatingHealth, setUpdatingHealth] = useState(false);
+
+  const healthColors: Record<string, string> = {
+    healthy: 'bg-green-100 text-green-800 border-green-300',
+    attention_needed: 'bg-amber-100 text-amber-800 border-amber-300',
+    critical: 'bg-red-100 text-red-700 border-red-300',
+    unknown: 'bg-surface-container text-on-surface-variant border-outline-variant/30',
+  };
+
+  const handleHealthUpdate = async (status: string) => {
+    setHealthStatus(status);
+    setUpdatingHealth(true);
+    try {
+      await updateField(uid, selected.field_id!, { health_status: status as Field['health_status'] });
+      onFieldUpdate({ health_status: status as Field['health_status'] });
+    } catch (e) {
+      console.error('Health update failed', e);
+    } finally {
+      setUpdatingHealth(false);
+    }
+  };
+
+  const fetchRoadmap = async () => {
+    if (!selected.active_crop) return;
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (!apiKey) { setRoadmapError('API key missing'); return; }
+    setRoadmapLoading(true);
+    setRoadmapError(null);
+    setShowRoadmap(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `Generate a concise cultivation roadmap for "${selected.active_crop}" in Bangladesh.
+Return ONLY valid JSON (no markdown):
+{"phases": [{"phaseName": "Phase name", "duration": "e.g. Days 1-15", "tasks": ["Task 1", "Task 2"], "tips": "One expert tip"}]}
+Provide exactly 5 chronological phases. Keep tasks brief.`;
+      const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+      const match = result.text.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('Invalid response');
+      const data = JSON.parse(match[0]);
+      setRoadmap(data.phases || []);
+    } catch {
+      setRoadmapError('Could not generate roadmap. Try again.');
+    } finally {
+      setRoadmapLoading(false);
+    }
+  };
+
+  const togglePhase = (idx: number) => {
+    setCompletedPhases(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  };
+
+  const progress = roadmap ? Math.round((completedPhases.size / roadmap.length) * 100) : 0;
+
+  return (
+    <motion.div key="detail" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-12}}
+      className="space-y-4">
+
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h3 className="text-xl font-black text-on-surface">{selected.field_name}</h3>
+          <p className="text-xs text-on-surface-variant mt-0.5">
+            {selected.input_mode === 'polygon' ? '📍 GPS Mapped' : '📍 Simple Mode'}
+            {selected.center_point.lat !== 0 && ` · ${selected.center_point.lat.toFixed(4)}°N, ${selected.center_point.lng.toFixed(4)}°E`}
+          </p>
+        </div>
+        <button onClick={onClose}>
+          <XCircle className="w-6 h-6 text-outline hover:text-primary transition-colors" />
+        </button>
+      </div>
+
+      {/* Active Crop Hero */}
+      {selected.active_crop ? (
+        <div className="bg-gradient-to-br from-primary/90 to-primary rounded-[2rem] p-5 text-white relative overflow-hidden">
+          <div className="absolute right-0 top-0 w-24 h-24 bg-white/10 rounded-full -translate-y-6 translate-x-6" />
+          <div className="relative z-10">
+          <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{t('activeCropLabel')}</p>
+            <h4 className="text-2xl font-black mt-1 leading-tight">{selected.active_crop}</h4>
+            <div className="flex items-center gap-2 mt-3">
+              <span className={cn('px-2.5 py-1 rounded-full text-[10px] font-black uppercase border',
+                healthColors[healthStatus].replace('bg-', 'bg-white/20 ').replace('text-', 'text-white ').replace('border-', 'border-white/30 '))}>
+                {healthStatus}
+              </span>
+              <button
+                onClick={() => { setShowRoadmap(s => !s); if (!roadmap && !roadmapLoading) fetchRoadmap(); }}
+                className="flex items-center gap-1 bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full text-[10px] font-black uppercase transition-colors"
+              >
+                <Activity className="w-3 h-3" />
+                {showRoadmap ? t('hideRoadmap') : t('viewRoadmap')}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-surface-container-low border-2 border-dashed border-outline-variant/30 rounded-[2rem] p-5 text-center space-y-2">
+          <Leaf className="w-8 h-8 mx-auto text-on-surface-variant/30" />
+          <p className="font-bold text-on-surface-variant text-sm">{t('noActiveCrop')}</p>
+          <button onClick={() => navigate(`/tools/crops?fieldId=${selected.field_id}`)}
+            className="text-primary font-black text-xs flex items-center gap-1 mx-auto">
+            {t('getAiCropRec')} <ChevronRight className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
+      {/* Inline Roadmap */}
+      <AnimatePresence>
+        {showRoadmap && (
+          <motion.div initial={{opacity:0,height:0}} animate={{opacity:1,height:'auto'}} exit={{opacity:0,height:0}}
+            className="overflow-hidden">
+            <div className="bg-surface-container-lowest rounded-[2rem] p-5 border border-outline-variant/10 space-y-4">
+              <div className="flex justify-between items-center">
+                <h4 className="font-black text-base">{t('cultivationRoadmap')}</h4>
+                <button onClick={fetchRoadmap} disabled={roadmapLoading} className="text-primary">
+                  <RefreshCw className={cn('w-4 h-4', roadmapLoading && 'animate-spin')} />
+                </button>
+              </div>
+
+              {roadmapLoading && (
+                <div className="flex items-center gap-2 text-on-surface-variant text-sm py-4 justify-center">
+                  <RefreshCw className="w-4 h-4 animate-spin text-primary" />
+                  {t('generatingRoadmap')}
+                </div>
+              )}
+
+              {roadmapError && (
+                <div className="flex gap-2 text-red-700 bg-red-50 p-3 rounded-xl text-xs font-bold">
+                  <AlertCircle className="w-4 h-4 shrink-0" />{t('roadmapError')}
+                </div>
+              )}
+
+
+              {roadmap && (
+                <>
+                  {/* Progress bar */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-bold">
+                      <span className="text-on-surface-variant">{t('roadmapProgress')}</span>
+                      <span className="text-primary">{completedPhases.size}/{roadmap.length} {t('phases')} · {progress}%</span>
+                    </div>
+                    <div className="h-2.5 w-full bg-outline-variant/20 rounded-full overflow-hidden">
+                      <motion.div
+                        animate={{ width: `${progress}%` }}
+                        transition={{ duration: 0.5 }}
+                        className="h-full bg-primary rounded-full"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Phase list */}
+                  <div className="space-y-2">
+                    {roadmap.map((phase, idx) => (
+                      <motion.div
+                        key={idx}
+                        layout
+                        onClick={() => togglePhase(idx)}
+                        className={cn(
+                          'flex gap-3 items-start p-3.5 rounded-2xl border cursor-pointer transition-all',
+                          completedPhases.has(idx)
+                            ? 'bg-primary/10 border-primary/30'
+                            : 'bg-surface-container-low border-outline-variant/10'
+                        )}
+                      >
+                        <div className="shrink-0 mt-0.5">
+                          {completedPhases.has(idx)
+                            ? <CheckSquare className="w-5 h-5 text-primary" />
+                            : <Square className="w-5 h-5 text-on-surface-variant/40" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex justify-between items-start gap-2">
+                            <p className={cn('font-bold text-sm', completedPhases.has(idx) && 'line-through text-on-surface-variant')}>
+                              {phase.phaseName}
+                            </p>
+                            <span className="shrink-0 text-[9px] font-black text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">
+                              {phase.duration}
+                            </span>
+                          </div>
+                          {!completedPhases.has(idx) && (
+                            <ul className="mt-1.5 space-y-0.5">
+                              {phase.tasks.slice(0, 2).map((task, ti) => (
+                                <li key={ti} className="text-xs text-on-surface-variant">• {task}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => navigate(`/tools/crops/roadmap?crop=${encodeURIComponent(selected.active_crop!)}&fieldId=${selected.field_id}`)}
+                    className="w-full flex items-center justify-center gap-2 text-primary text-xs font-black py-2.5 bg-primary/5 rounded-xl border border-primary/20 hover:bg-primary/10 transition-colors"
+                  >
+                    <MapIcon className="w-4 h-4" /> {t('viewFullRoadmap')}
+                  </button>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Field Metrics */}
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { label: t('area'), value: formatArea(selected.area_size, selected.area_unit), icon: MapIcon },
+          { label: t('soilTypeLabel2'), value: selected.soil_summary?.type || 'Unknown', icon: FlaskConical },
+          { label: t('soilPh'), value: selected.soil_summary?.ph ? `pH ${selected.soil_summary.ph}` : 'N/A', icon: Droplets },
+          { label: t('gpsPoints'), value: selected.input_mode === 'polygon' ? `${selected.polygon?.points.length ?? 0} pts` : 'N/A', icon: MapPin },
+        ].map(item => (
+          <div key={item.label} className="bg-surface-container-low p-3.5 rounded-2xl flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <item.icon className="w-4 h-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-[9px] text-on-surface-variant uppercase font-bold">{item.label}</p>
+              <p className="font-black text-sm capitalize">{item.value}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Health Status Updater */}
+      <div className="bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/10 space-y-2">
+        <p className="text-xs font-black uppercase text-on-surface-variant">{t('updateFieldHealth')}</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(['healthy', 'attention_needed', 'critical', 'unknown'] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => handleHealthUpdate(s)}
+              disabled={updatingHealth}
+              className={cn(
+                'py-2 px-3 rounded-xl text-[10px] font-black uppercase border transition-all',
+                healthStatus === s ? healthColors[s] : 'bg-surface-container text-on-surface-variant/60 border-transparent hover:border-outline-variant/30'
+              )}
+            >
+              {s === 'healthy' ? t('healthHealthy') : s === 'attention_needed' ? t('healthAttention') : s === 'critical' ? t('healthCritical') : t('healthUnknown')}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Rename */}
+      <div className="space-y-2">
+        <p className="text-xs font-bold uppercase text-on-surface-variant">{t('renameField')}</p>
+        <div className="flex gap-2">
+          <input value={editName} onChange={e => setEditName(e.target.value)} className={`flex-1 ${inputCls.replace('w-full ','')}`} />
+          <button onClick={handleSaveEdit} className="bg-primary text-white px-4 rounded-xl font-bold flex items-center gap-1">
+            <Edit2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={() => navigate(`/tools/crops?fieldId=${selected.field_id}`)}
+          className="bg-primary/10 text-primary py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 hover:bg-primary/20 transition-colors"
+        >
+          <TrendingUp className="w-5 h-5" />
+          {t('cropRecommendation')}
+        </button>
+        <button
+          onClick={() => navigate('/tools/scan')}
+          className="bg-red-50 text-red-600 py-3.5 rounded-2xl font-bold text-xs flex flex-col items-center gap-1.5 hover:bg-red-100 transition-colors"
+        >
+          <ScanLine className="w-5 h-5" />
+          {t('scanDisease')}
+        </button>
+        {selected.active_crop && (
+          <button
+            onClick={() => { setShowRoadmap(true); if (!roadmap && !roadmapLoading) fetchRoadmap(); }}
+            className="col-span-2 bg-surface-container-low text-on-surface py-3.5 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 hover:bg-surface-container transition-colors border border-outline-variant/20"
+          >
+            <Activity className="w-4 h-4 text-primary" />
+            {t('loadAiRoadmap')}
+          </button>
+        )}
+      </div>
+
+      {/* Delete */}
+      <button onClick={() => handleDelete(selected)}
+        className="w-full border-2 border-red-200 text-red-600 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition-colors active:scale-95">
+        <Trash2 className="w-4 h-4" /> {t('deleteField')}
+      </button>
+    </motion.div>
+  );
+}
+
+// Tile sources
+const TILE_SOURCES = {
+  streets: (z: number, x: number, y: number) =>
+    `https://a.basemaps.cartocdn.com/rastertiles/voyager/${z}/${x}/${y}.png`,
+  topo: (z: number, x: number, y: number) =>
+    `https://tile.opentopomap.org/${z}/${x}/${y}.png`,
+  satellite: (z: number, x: number, y: number) =>
+    `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
+};
+
+type MapStyle = keyof typeof TILE_SOURCES;
+
+const HEALTH_COLORS: Record<string, { fill: string; stroke: string }> = {
+  healthy:          { fill: '#16a34a', stroke: '#14532d' },
+  attention_needed: { fill: '#d97706', stroke: '#92400e' },
+  critical:         { fill: '#dc2626', stroke: '#7f1d1d' },
+  unknown:          { fill: '#6b7280', stroke: '#374151' },
+};
+
+function MapCanvas({ center, points, fields, selectedId, onSelectField, onRecenter }: {
+  center: LatLng; points: LatLng[]; fields: Field[];
+  selectedId?: string;
+  onSelectField?: (f: Field) => void;
+  onRecenter?: () => void;
+}) {
+  const [zoom, setZoom] = useState(16);
+  const [mapStyle, setMapStyle] = useState<MapStyle>('streets');
+
+  // Recompute tile grid whenever zoom or center changes
+  const { tiles, bounds, gridSize } = getTileGrid(center.lat, center.lng, zoom);
   const canvas = { width: gridSize, height: gridSize };
   const toXY = (p: LatLng) => latLngToPixel(p, bounds as MapBounds, canvas);
+
   const polyPath = (pts: LatLng[]) =>
-    pts.map((p, i) => { const {x,y} = toXY(p); return `${i===0?'M':'L'}${x} ${y}`; }).join(' ') + ' Z';
-  const scale = 320 / gridSize;
+    pts.map((p, i) => { const { x, y } = toXY(p); return `${i === 0 ? 'M' : 'L'}${x} ${y}`; }).join(' ') + ' Z';
+
+  const displayH = 340;
+  const scale = displayH / gridSize;
+  const tileSource = TILE_SOURCES[mapStyle];
+
   return (
-    <div className="relative rounded-3xl overflow-hidden shadow-lg" style={{ height: 320 }}>
-      <div style={{ width: gridSize, height: gridSize, position: 'relative', transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+    <div className="relative rounded-[2rem] overflow-hidden shadow-xl border border-outline-variant/20" style={{ height: displayH }}>
+
+      {/* Map tiles */}
+      <div style={{ width: gridSize, height: gridSize, position: 'absolute', top: 0, left: 0, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
         {tiles.map(t => (
           <img
-            key={`${t.tx}-${t.ty}`}
-            src={TILE_URL(16, t.tx, t.ty)}
+            key={`${t.tx}-${t.ty}-${mapStyle}-${zoom}`}
+            src={tileSource(zoom, t.tx, t.ty)}
             width={256} height={256} alt=""
             className="absolute"
             style={{ left: t.offsetX, top: t.offsetY }}
+            loading="eager"
           />
         ))}
+
+        {/* SVG Overlay */}
         <svg className="absolute inset-0" width={gridSize} height={gridSize}>
+          <defs>
+            <filter id="drop-shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.3" />
+            </filter>
+          </defs>
+
+          {/* Saved fields */}
           {fields.map(f => {
             const sel = f.field_id === selectedId;
-            const col = sel ? '#0d631b' : '#2e7d32';
-            if (f.input_mode === 'polygon' && f.polygon?.points.length) {
-              return <path key={f.field_id} d={polyPath(f.polygon.points)}
-                fill={col} fillOpacity={0.35} stroke={col} strokeWidth={4}
-                className="cursor-pointer" onClick={() => onSelectField?.(f)} />;
+            const hc = HEALTH_COLORS[f.health_status || 'unknown'];
+            const fillColor = sel ? '#0d631b' : hc.fill;
+            const strokeColor = sel ? '#14532d' : hc.stroke;
+
+            if (f.input_mode === 'polygon' && f.polygon?.points?.length) {
+              const centPt = computeCentroid(f.polygon.points.map(p => ({ lat: p.lat, lng: p.lng })));
+              const { x: cx, y: cy } = toXY(centPt);
+              return (
+                <g key={f.field_id} className="cursor-pointer" onClick={() => onSelectField?.(f)}>
+                  <path
+                    d={polyPath(f.polygon.points.map(p => ({ lat: p.lat, lng: p.lng })))}
+                    fill={fillColor} fillOpacity={sel ? 0.55 : 0.4}
+                    stroke={strokeColor} strokeWidth={sel ? 5 : 3}
+                    filter="url(#drop-shadow)"
+                  />
+                  {/* Field label */}
+                  <rect x={cx - 40} y={cy - 12} width={80} height={22} rx={11} fill="white" fillOpacity={0.85} />
+                  <text x={cx} y={cy + 4} textAnchor="middle" fontSize={11} fontWeight="700" fill={strokeColor}>
+                    {f.field_name.length > 10 ? f.field_name.slice(0, 10) + '…' : f.field_name}
+                  </text>
+                </g>
+              );
             }
-            const {x,y} = toXY({ lat: f.center_point.lat, lng: f.center_point.lng });
-            return <circle key={f.field_id} cx={x} cy={y} r={16}
-              fill={col} fillOpacity={0.85} stroke="white" strokeWidth={4}
-              className="cursor-pointer" onClick={() => onSelectField?.(f)} />;
+
+            // Simple point marker
+            const { x, y } = toXY({ lat: f.center_point.lat, lng: f.center_point.lng });
+            return (
+              <g key={f.field_id} className="cursor-pointer" onClick={() => onSelectField?.(f)}>
+                {sel && <circle cx={x} cy={y} r={28} fill={fillColor} fillOpacity={0.2} />}
+                <circle cx={x} cy={y} r={sel ? 18 : 14}
+                  fill={fillColor} stroke="white" strokeWidth={sel ? 4 : 3}
+                  filter="url(#drop-shadow)" />
+                <text x={x} y={y + 5} textAnchor="middle" fontSize={10} fontWeight="800" fill="white">
+                  {f.field_name.slice(0, 2).toUpperCase()}
+                </text>
+                {/* Name label */}
+                <rect x={x - 38} y={y + 22} width={76} height={20} rx={10} fill="white" fillOpacity={0.9} />
+                <text x={x} y={y + 36} textAnchor="middle" fontSize={10} fontWeight="700" fill={strokeColor}>
+                  {f.field_name.length > 10 ? f.field_name.slice(0, 10) + '…' : f.field_name}
+                </text>
+              </g>
+            );
           })}
+
+          {/* GPS walk — in-progress polygon */}
           {points.length > 0 && (
             <>
-              <path d={polyPath(points)} fill="#0d631b" fillOpacity={0.2}
-                stroke="#0d631b" strokeWidth={3} strokeDasharray="8 5" />
-              {points.map((p,i) => { const {x,y}=toXY(p); return (
-                <circle key={i} cx={x} cy={y} r={12} fill="#0d631b" stroke="white" strokeWidth={3} />
-              );})}
+              <path d={polyPath(points)} fill="#0d631b" fillOpacity={0.18}
+                stroke="#16a34a" strokeWidth={3} strokeDasharray="10 6" />
+              {points.map((p, i) => {
+                const { x, y } = toXY(p);
+                return (
+                  <g key={i}>
+                    <circle cx={x} cy={y} r={11} fill="#16a34a" stroke="white" strokeWidth={3} />
+                    <text x={x} y={y + 4} textAnchor="middle" fontSize={9} fontWeight="800" fill="white">{i + 1}</text>
+                  </g>
+                );
+              })}
             </>
           )}
-          {(() => { const {x,y}=toXY(center); return (
-            <circle cx={x} cy={y} r={10} fill="#1565c0" stroke="white" strokeWidth={3} />
-          );})()}
+
+          {/* Current GPS location */}
+          {(() => {
+            const { x, y } = toXY(center);
+            return (
+              <g>
+                <circle cx={x} cy={y} r={22} fill="#1d4ed8" fillOpacity={0.15} />
+                <circle cx={x} cy={y} r={11} fill="#2563eb" stroke="white" strokeWidth={3} filter="url(#drop-shadow)" />
+                <circle cx={x} cy={y} r={4} fill="white" />
+              </g>
+            );
+          })()}
         </svg>
       </div>
-      <div className="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded-lg">
-        © OpenStreetMap
+
+      {/* ── TOP-LEFT: Map style switcher ── */}
+      <div className="absolute top-3 left-3 flex gap-1.5 z-10">
+        {(Object.keys(TILE_SOURCES) as MapStyle[]).map(style => (
+          <button
+            key={style}
+            onClick={() => setMapStyle(style)}
+            className={cn(
+              'px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider backdrop-blur-md border transition-all',
+              mapStyle === style
+                ? 'bg-white text-on-surface border-white shadow-md'
+                : 'bg-black/40 text-white border-white/20 hover:bg-black/60'
+            )}
+          >
+            {style === 'streets' ? '🗺 Street' : style === 'topo' ? '⛰ Topo' : '🛰 Satellite'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── TOP-RIGHT: Zoom controls ── */}
+      <div className="absolute top-3 right-3 flex flex-col gap-1 z-10">
+        <button
+          onClick={() => setZoom(z => Math.min(z + 1, 18))}
+          className="w-8 h-8 bg-white/90 backdrop-blur-md rounded-xl shadow-md flex items-center justify-center text-on-surface font-black text-lg hover:bg-white transition-colors border border-white/50"
+          title="Zoom in"
+        >+</button>
+        <div className="w-8 h-5 flex items-center justify-center bg-black/30 backdrop-blur-md rounded-lg text-white text-[9px] font-bold">
+          z{zoom}
+        </div>
+        <button
+          onClick={() => setZoom(z => Math.max(z - 1, 14))}
+          className="w-8 h-8 bg-white/90 backdrop-blur-md rounded-xl shadow-md flex items-center justify-center text-on-surface font-black text-lg hover:bg-white transition-colors border border-white/50"
+          title="Zoom out"
+        >−</button>
+      </div>
+
+      {/* ── BOTTOM-RIGHT: Re-center button ── */}
+      {onRecenter && (
+        <button
+          onClick={onRecenter}
+          className="absolute bottom-10 right-3 z-10 w-9 h-9 bg-white/90 backdrop-blur-md rounded-xl shadow-md flex items-center justify-center hover:bg-white transition-colors border border-white/50"
+          title="Re-center on my location"
+        >
+          <Navigation className="w-4 h-4 text-primary" />
+        </button>
+      )}
+
+      {/* ── BOTTOM-LEFT: Legend ── */}
+      {fields.length > 0 && (
+        <div className="absolute bottom-10 left-3 z-10 bg-black/50 backdrop-blur-md rounded-xl px-2.5 py-1.5 space-y-1">
+          {Object.entries(HEALTH_COLORS).map(([status, col]) => {
+            const count = fields.filter(f => (f.health_status || 'unknown') === status).length;
+            if (count === 0) return null;
+            return (
+              <div key={status} className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ background: col.fill }} />
+                <span className="text-white text-[9px] font-bold capitalize">{status.replace('_', ' ')} ({count})</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Attribution + field count bar ── */}
+      <div className="absolute bottom-0 left-0 right-0 bg-black/50 backdrop-blur-sm px-3 py-1.5 flex items-center justify-between">
+        <span className="text-white text-[9px] font-medium opacity-70">© OpenStreetMap contributors</span>
+        {fields.length > 0 && (
+          <span className="text-white text-[9px] font-bold">
+            {fields.length} field{fields.length !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -80,6 +566,7 @@ function MapCanvas({ center, points, fields, selectedId, onSelectField }: {
 export default function FieldMapper() {
   const { t } = useApp();
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const uid = currentUser?.uid ?? '';
 
   const [mode, setMode] = useState<Mode>('list');
@@ -260,7 +747,8 @@ export default function FieldMapper() {
 
         <MapCanvas center={mapCenter} points={points} fields={fields}
           selectedId={selected?.field_id}
-          onSelectField={f => { setSelected(f); setEditName(f.field_name); setMode('detail'); }} />
+          onSelectField={f => { setSelected(f); setEditName(f.field_name); setMode('detail'); }}
+          onRecenter={() => getPos(setCurrentPos)} />
 
         {/* GPS status bar */}
         {(mode === 'polygon-walk') && (
@@ -475,42 +963,17 @@ export default function FieldMapper() {
           )}
 
           {mode === 'detail' && selected && (
-            <motion.div key="detail" initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-12}}
-              className="bg-surface-container-lowest rounded-3xl p-6 border border-outline-variant/10 editorial-shadow space-y-5">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xl font-black">{selected.field_name}</h3>
-                <button onClick={() => { setMode('list'); setSelected(null); }}>
-                  <XCircle className="w-6 h-6 text-outline hover:text-primary transition-colors" />
-                </button>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { label: 'Area', value: formatArea(selected.area_size, selected.area_unit) },
-                  { label: 'Mode', value: selected.input_mode === 'polygon' ? 'GPS Mapped' : 'Simple' },
-                  { label: 'Status', value: selected.health_status || 'unknown' },
-                  { label: 'Points', value: selected.input_mode === 'polygon' ? String(selected.polygon?.points.length ?? 0) : 'N/A' },
-                ].map(item => (
-                  <div key={item.label} className="bg-surface-container-low p-3 rounded-2xl">
-                    <p className="text-xs text-on-surface-variant uppercase font-bold mb-1">{item.label}</p>
-                    <p className="font-black capitalize">{item.value}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-2">
-                <p className="text-xs font-bold uppercase text-on-surface-variant">Rename</p>
-                <div className="flex gap-2">
-                  <input value={editName} onChange={e => setEditName(e.target.value)} className={`flex-1 ${inputCls.replace('w-full ','')}`} />
-                  <button onClick={handleSaveEdit}
-                    className="bg-primary text-white px-4 rounded-xl font-bold flex items-center gap-1">
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              <button onClick={() => handleDelete(selected)}
-                className="w-full border-2 border-red-200 text-red-600 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 transition-colors active:scale-95">
-                <Trash2 className="w-4 h-4" /> Delete Field
-              </button>
-            </motion.div>
+            <FieldDetailPanel
+              selected={selected}
+              uid={uid}
+              editName={editName}
+              setEditName={setEditName}
+              handleSaveEdit={handleSaveEdit}
+              handleDelete={handleDelete}
+              navigate={navigate}
+              onClose={() => { setMode('list'); setSelected(null); }}
+              onFieldUpdate={(updates) => setSelected(prev => prev ? { ...prev, ...updates } : prev)}
+            />
           )}
 
         </AnimatePresence>
