@@ -178,7 +178,7 @@ const translations = {
     updateFieldHealth: 'Update Field Health', renameField: 'Rename Field',
     loadAiRoadmap: 'Load AI Cultivation Roadmap',
     deleteField: 'Delete Field', cropRecommendation: 'Crop Recommendation',
-    scanDisease: 'Scan for Disease', gpsMapped: 'GPS Mapped', simpleLabel: 'Simple Mode',
+    scanDisease: 'Scan for Disease', simpleLabel: 'Simple Mode',
     // Add Field flow
     chooseMode: 'Choose mapping mode',
     gpsModeTitle: 'GPS Walk Mode', gpsModeDesc: 'Walk your field boundary and tap to mark points',
@@ -393,7 +393,7 @@ const translations = {
     updateFieldHealth: 'জমির স্বাস্থ্য আপডেট করুন', renameField: 'জমির নাম পরিবর্তন',
     loadAiRoadmap: 'এআই চাষ পরিকল্পনা লোড করুন',
     deleteField: 'জমি মুছুন', cropRecommendation: 'ফসল সুপারিশ',
-    scanDisease: 'রোগ স্ক্যান করুন', gpsMapped: 'জিপিএস ম্যাপড', simpleLabel: 'সাধারণ মোড',
+    scanDisease: 'রোগ স্ক্যান করুন', simpleLabel: 'সাধারণ মোড',
     // Add Field flow
     chooseMode: 'ম্যাপিং পদ্ধতি বেছে নিন',
     gpsModeTitle: 'জিপিএস ওয়াক মোড', gpsModeDesc: 'জমির সীমানা বরাবর হেঁটে পয়েন্ট চিহ্নিত করুন',
