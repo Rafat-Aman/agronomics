@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../AuthContext';
 import Layout from '../components/Layout';
-import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import {
   Sprout, Trash2, Loader2, CalendarDays, MapPin, Sparkles,
   ChevronDown, CheckCircle2, XCircle, Bot, Pencil, Save,
@@ -155,8 +155,8 @@ export default function CropDetail() {
 
   const handleGetAdvice = async () => {
     if (!crop || !cropId) return;
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) { setAiError('Gemini API key নেই।'); return; }
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    if (!apiKey) { setAiError('Anthropic API key নেই।'); return; }
     setAiLoading(true); setAiError(null);
     const now = new Date();
     const dateStr = now.toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -182,9 +182,13 @@ ${userNote.trim() ? `\nকৃষক আজ জানাচ্ছেন: "${userN
 
 সম্পূর্ণ উত্তর বাংলায় লিখুন। বুলেট পয়েন্ট ব্যবহার করুন।`;
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-      const content = result.text ?? '';
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const content = response.content[0].type === 'text' ? response.content[0].text : '';
       const savedId = await saveCropAdvice(uid, cropId, { userNote: userNote.trim() || undefined, content });
       setAdvice(prev => [{ id: savedId, userNote: userNote.trim() || undefined, content, generated_at: new Date() }, ...prev]);
       setUserNote('');

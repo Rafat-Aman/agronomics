@@ -6,7 +6,7 @@ import Layout from '../components/Layout';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapPin, Plus, Trash2, Edit2, CheckCircle, XCircle, Navigation, Undo2, Save,
   AlertCircle, TrendingUp, ScanLine, Leaf, ChevronRight, Clock, Droplets,
-  FlaskConical, CheckSquare, Square, RefreshCw, Map as MapIcon, Activity,
+  FlaskConical, CheckSquare, Square, RefreshCw, Map as MapIcon, Activity, Loader2,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
@@ -16,7 +16,7 @@ import {
   type LatLng, type MapBounds,
 } from '../lib/fieldUtils';
 import { saveFieldWithPolygon, updateField, deleteField, getUserFields } from '../lib/db';
-import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import type { Field } from '../types';
 
 type Mode = 'list' | 'add-choose' | 'polygon-walk' | 'polygon-review' | 'simple' | 'detail';
@@ -56,6 +56,12 @@ function FieldDetailPanel({
   const [healthStatus, setHealthStatus] = useState(selected.health_status || 'unknown');
   const [updatingHealth, setUpdatingHealth] = useState(false);
 
+  // Soil quality update
+  const [soilType, setSoilType] = useState(selected.soil_summary?.type || 'Unknown');
+  const [soilPh, setSoilPh] = useState(selected.soil_summary?.ph ?? 7);
+  const [updatingSoil, setUpdatingSoil] = useState(false);
+  const [soilSaved, setSoilSaved] = useState(false);
+
   const healthColors: Record<string, string> = {
     healthy: 'bg-green-100 text-green-800 border-green-300',
     attention_needed: 'bg-amber-100 text-amber-800 border-amber-300',
@@ -76,21 +82,41 @@ function FieldDetailPanel({
     }
   };
 
+  const handleSoilUpdate = async () => {
+    const ph = Number(soilPh);
+    if (isNaN(ph) || ph < 4 || ph > 9) return;
+    setUpdatingSoil(true);
+    setSoilSaved(false);
+    try {
+      await updateField(uid, selected.field_id!, { soil_summary: { type: soilType, ph } });
+      onFieldUpdate({ soil_summary: { type: soilType, ph } });
+      setSoilSaved(true);
+    } catch (e) {
+      console.error('Soil update failed', e);
+    } finally {
+      setUpdatingSoil(false);
+    }
+  };
+
   const fetchRoadmap = async () => {
     if (!selected.active_crop) return;
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) { setRoadmapError('API key missing'); return; }
     setRoadmapLoading(true);
     setRoadmapError(null);
     setShowRoadmap(true);
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
       const prompt = `Generate a concise cultivation roadmap for "${selected.active_crop}" in Bangladesh.
 Return ONLY valid JSON (no markdown):
 {"phases": [{"phaseName": "Phase name", "duration": "e.g. Days 1-15", "tasks": ["Task 1", "Task 2"], "tips": "One expert tip"}]}
 Provide exactly 5 chronological phases. Keep tasks brief.`;
-      const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-      const match = result.text.match(/\{[\s\S]*\}/);
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const match = (response.content[0].type === 'text' ? response.content[0].text : '').match(/\{[\s\S]*\}/);
       if (!match) throw new Error('Invalid response');
       const data = JSON.parse(match[0]);
       setRoadmap(data.phases || []);
@@ -277,6 +303,54 @@ Provide exactly 5 chronological phases. Keep tasks brief.`;
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Soil Quality Editor */}
+      <div className="bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/10 space-y-3">
+        <p className="text-xs font-black uppercase text-on-surface-variant flex items-center gap-1.5">
+          <FlaskConical className="w-3.5 h-3.5" /> {t('soilQuality') || 'Soil Quality'}
+        </p>
+        <div className="space-y-2">
+          <div>
+            <label className="text-[10px] font-bold uppercase text-on-surface-variant block mb-1">{t('soilTypeLabel2') || 'Soil Type'}</label>
+            <select
+              value={soilType}
+              onChange={e => { setSoilType(e.target.value); setSoilSaved(false); }}
+              className={inputCls}
+            >
+              <option value="Unknown">Unknown</option>
+              <option value="Alluvial">Alluvial / পলিমাটি</option>
+              <option value="Clay">Clay / এঁটেল মাটি</option>
+              <option value="Loamy">Loamy / দোআঁশ মাটি</option>
+              <option value="Sandy Loam">Sandy Loam / বালি দোআঁশ</option>
+              <option value="Sandy">Sandy / বালি মাটি</option>
+              <option value="Silty Clay">Silty Clay / পলি-এঁটেল</option>
+              <option value="Peat">Peat / জৈব মাটি</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] font-bold uppercase text-on-surface-variant block mb-1">{t('soilPh') || 'Soil pH'} (4.0 – 9.0)</label>
+            <input
+              type="number"
+              min={4} max={9} step={0.1}
+              value={soilPh}
+              onChange={e => { setSoilPh(parseFloat(e.target.value)); setSoilSaved(false); }}
+              className={inputCls}
+            />
+          </div>
+        </div>
+        <button
+          onClick={handleSoilUpdate}
+          disabled={updatingSoil}
+          className="w-full bg-primary/10 text-primary py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-transform"
+        >
+          {updatingSoil
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : soilSaved
+              ? <CheckCircle className="w-4 h-4 text-green-600" />
+              : <Save className="w-4 h-4" />}
+          {soilSaved ? 'Saved!' : updatingSoil ? 'Saving…' : 'Save Soil Details'}
+        </button>
       </div>
 
       {/* Health Status Updater */}

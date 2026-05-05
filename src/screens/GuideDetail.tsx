@@ -8,7 +8,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import Layout from '../components/Layout';
 import { useApp } from '../AppContext';
-import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import { cn } from '../lib/utils';
 
 // Season badge colors
@@ -51,12 +51,12 @@ export default function GuideDetail() {
 
   // ── Refresh: generate a fresh guide on the SAME topic ──────────────────────
   const handleRefresh = async () => {
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) return;
     setRefreshing(true);
     setQaAnswer(null);
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
       const lang = language === 'bn' ? 'Bengali' : 'English';
       const prompt = `You are a senior Bangladeshi agronomist.
 Generate a COMPLETELY DIFFERENT and unique farming guide about: "${tip.title}" in ${lang}.
@@ -79,8 +79,12 @@ Return ONLY valid JSON:
   "proTip": "A different expert insight with measurable outcome",
   "relatedQuestion": "A different realistic farmer question"
 }`;
-      const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-      const match = result.text.match(/\{[\s\S]*\}/);
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const match = (response.content[0].type === 'text' ? response.content[0].text : '').match(/\{[\s\S]*\}/);
       if (!match) throw new Error('Bad response');
       const data = JSON.parse(match[0]);
       setTip((prev: any) => ({ ...prev, ...data }));
@@ -95,21 +99,25 @@ Return ONLY valid JSON:
   const handleAsk = async (q?: string) => {
     const query = q ?? qaQuestion.trim();
     if (!query) return;
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) { setQaError('API key missing'); return; }
     setQaLoading(true);
     setQaError(null);
     setQaAnswer(null);
     if (q) setQaQuestion(q);
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
       const lang = language === 'bn' ? 'Bengali' : 'English';
       const prompt = `You are a senior Bangladeshi agronomist. Context: "${tip.title}".
 Answer this farmer's question in ${lang} in under 120 words. Be specific, practical, and mention exact quantities or timings.
 Question: ${query}
 Answer:`;
-      const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-      setQaAnswer(result.text.trim());
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 512,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      setQaAnswer((response.content[0].type === 'text' ? response.content[0].text : '').trim());
     } catch {
       setQaError('Could not get answer. Please try again.');
     } finally {

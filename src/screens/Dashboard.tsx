@@ -35,7 +35,7 @@ import {
   limit 
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -303,7 +303,7 @@ function DailyGuide() {
 
   const fetchTip = async (idx: number) => {
     setLoading(true);
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     const topic = FARMING_TOPICS[idx];
 
     if (!apiKey) {
@@ -319,7 +319,7 @@ function DailyGuide() {
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
       const lang = language === 'bn' ? 'Bengali' : 'English';
       const prompt = `You are a senior Bangladeshi agronomist with 20 years of field experience.
 Today's topic: "${topic}"
@@ -343,8 +343,12 @@ Return ONLY valid JSON (no markdown, no code block):
   "relatedQuestion": "A realistic question a Bangladeshi farmer would ask about this topic"
 }`;
 
-      const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-      const text = result.text;
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const text = response.content[0].type === 'text' ? response.content[0].text : '';
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) throw new Error('Bad response');
       const data = JSON.parse(match[0]);
