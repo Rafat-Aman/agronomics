@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../AppContext';
 import { useAuth } from '../AuthContext';
 import Layout from '../components/Layout';
-import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import { TrendingUp, ShieldCheck, CloudLightning, Leaf, Loader2, AlertCircle, MapPin, Thermometer, Droplets, History, Plus, ChevronDown, Trash2 } from 'lucide-react';
 
 import { cn } from '../lib/utils';
@@ -157,12 +157,12 @@ export default function CropRecommendation() {
   const getRecommendation = async () => {
     if (!uid) { setError('Please log in first.'); return; }
     if (!n || !p || !k) { setError('Please enter NPK values.'); return; }
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-    if (!apiKey) { setError('Gemini API key missing.'); return; }
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    if (!apiKey) { setError('Anthropic API key missing.'); return; }
 
     setLoading(true); setError(null); setPrediction(null);
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 
       // Derive current date and Bangladesh agricultural season
       const now = new Date();
@@ -220,8 +220,12 @@ Return ONLY valid JSON (no markdown):
   "summary": "2-sentence insight on why these crops are best given current weather and soil."
 }`;
 
-      const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-      const text = result.text;
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const text = response.content[0].type === 'text' ? response.content[0].text : '';
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) throw new Error('Invalid AI response format.');
       const data = JSON.parse(match[0]);

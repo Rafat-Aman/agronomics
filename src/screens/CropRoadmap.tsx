@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import { Loader2, AlertCircle, Clock, CheckCircle2, Leaf, Package, AlertTriangle, Plus } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../AuthContext';
@@ -76,7 +76,7 @@ export default function CropRoadmap() {
         return;
       }
 
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
       if (!apiKey) {
         setError('API Key is missing.');
         setLoading(false);
@@ -84,7 +84,7 @@ export default function CropRoadmap() {
       }
 
       try {
-        const ai = new GoogleGenAI({ apiKey });
+        const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
         const prompt = `Act as an expert agronomist in Bangladesh. Provide a highly realistic and detailed, step-by-step cultivation roadmap from start to harvest for: "${cropName}".
         Return the response in STRICT JSON format matching this exact structure:
         {
@@ -102,12 +102,13 @@ export default function CropRoadmap() {
         }
         Do not include markdown formatting, just the JSON string. Ensure there are at least 4 to 5 distinct chronological phases. Make the tasks, resources, and risks highly specific to the crop and realistic for a farmer.`;
 
-        const result = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt
+        const response = await client.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 2048,
+          messages: [{ role: 'user', content: prompt }],
         });
 
-        const text = result.text;
+        const text = response.content[0].type === 'text' ? response.content[0].text : '';
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('Invalid AI response format');
 

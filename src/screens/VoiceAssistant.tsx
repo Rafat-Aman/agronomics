@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Layout from '../components/Layout';
-import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import { motion, AnimatePresence } from 'motion/react';
 import { Mic, MicOff, Volume2, VolumeX, Trash2, Sprout, Languages, Info, Menu, X, MessageSquare, PlusCircle } from 'lucide-react';
 import { useAuth } from '../AuthContext';
@@ -236,9 +236,9 @@ export default function VoiceAssistant() {
       window.speechSynthesis.speak(primer);
     }
 
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) {
-      console.error("[VoiceAssistant] Gemini API key is missing from .env");
+      console.error("[VoiceAssistant] Anthropic API key is missing from .env");
       setMessages((prev) => [...prev, {
         id: Date.now() + '-err',
         role: 'assistant',
@@ -250,20 +250,21 @@ export default function VoiceAssistant() {
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey });
-      
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+
       const sys = isBn
         ? 'You are a helpful farming assistant. Respond ONLY in Bangla. Be very brief.'
         : 'You are a helpful farming assistant. Respond ONLY in English. Be very brief.';
 
-      console.log("[VoiceAssistant] Calling Gemini model...");
-      const result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: `${sys}\n\nUser: ${userText}`
+      console.log("[VoiceAssistant] Calling Claude model...");
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 512,
+        messages: [{ role: 'user', content: `${sys}\n\nUser: ${userText}` }],
       });
-      
-      console.log("[VoiceAssistant] Received response from Gemini.");
-      const aiText = result.text?.trim() || '...';
+
+      console.log("[VoiceAssistant] Received response from Claude.");
+      const aiText = (response.content[0].type === 'text' ? response.content[0].text : '').trim() || '...';
       
       if (sessionId) {
         console.log("[VoiceAssistant] Saving AI response to session:", sessionId);

@@ -14,9 +14,9 @@
     "cap:sync": "npm run setup-env && vite build && cap sync"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.93.0",
     "@capacitor/android": "^6.0.0",
     "@capacitor/core": "^6.0.0",
-    "@google/genai": "^1.29.0",
     "@tailwindcss/vite": "^4.1.14",
     "@tensorflow/tfjs": "^4.22.0",
     "@vitejs/plugin-react": "^5.0.4",

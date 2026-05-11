@@ -5,7 +5,7 @@ import Layout from '../components/Layout';
 import {
   Sprout, Plus, Trash2, Loader2, Leaf, CalendarDays,
   MapPin, ChevronDown, CheckCircle2,
-  XCircle, Pencil, Bot
+  XCircle, X, Pencil, Bot
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {

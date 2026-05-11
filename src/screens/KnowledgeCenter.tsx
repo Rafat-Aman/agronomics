@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../AppContext';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { GoogleGenAI } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import {
   BookOpen, Sprout, Bug, Microscope, ArrowRight, Clock,
   Droplets, Sun, Wind, FlaskConical, Leaf, Loader2,
@@ -48,12 +48,12 @@ function FarmingQA() {
   const askAI = async (q?: string) => {
     const query = q || question.trim();
     if (!query) return;
-    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) { setError('API key missing.'); return; }
     setLoading(true); setError(null); setAnswer(null);
     if (q) setQuestion(q);
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
       const prompt = `You are a senior Bangladeshi agronomist with 20 years of field experience.
 Answer this farming question in the same language as the question (Bengali or English).
 Be practical, specific, and mention exact product names, quantities, and timings where relevant.
@@ -62,8 +62,12 @@ Keep the answer under 150 words and use simple language a farmer can understand.
 Question: ${query}
 
 Answer:`;
-      const result = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-      setAnswer(result.text.trim());
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 512,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      setAnswer((response.content[0].type === 'text' ? response.content[0].text : '').trim());
     } catch { setError('Could not get answer. Please try again.'); }
     finally { setLoading(false); }
   };

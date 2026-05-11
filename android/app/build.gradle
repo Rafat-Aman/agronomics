@@ -1,6 +1,4 @@
 apply plugin: 'com.android.application'
-// ADD THIS LINE BELOW
-apply plugin: 'com.google.gms.google-services'
 
 android {
     namespace "com.digital.agronomist"
