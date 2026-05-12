@@ -26,6 +26,25 @@ const SpeechRecognitionAPI =
     ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     : undefined;
 
+const getMicPermissionError = (isBn: boolean): string => {
+  const isAndroid = /android/i.test(navigator.userAgent);
+  const isInsecure = typeof window !== 'undefined' && !window.isSecureContext;
+
+  if (isInsecure) {
+    return isBn
+      ? 'মাইক্রোফোন ব্যবহার করতে HTTPS সংযোগ প্রয়োজন। সাইট অ্যাডমিনের সাথে যোগাযোগ করুন।'
+      : 'Microphone requires a secure (HTTPS) connection. Please contact the site admin.';
+  }
+  if (isAndroid) {
+    return isBn
+      ? 'মাইক্রোফোন ব্যবহারের অনুমতি নেই। Chrome-এর Settings > Site Settings > Microphone থেকে Allow করুন, তারপর আবার চেষ্টা করুন।'
+      : 'Microphone permission blocked. Go to Chrome Settings > Site Settings > Microphone and allow access, then try again.';
+  }
+  return isBn
+    ? 'মাইক্রোফোন ব্যবহারের অনুমতি নেই। ব্রাউজারের অ্যাড্রেস বার বা Settings থেকে Microphone permission Allow করুন, তারপর আবার চেষ্টা করুন।'
+    : 'Microphone permission blocked. Allow it from your browser address bar or Settings, then try again.';
+};
+
 const hasSpeechSynthesis = () =>
   typeof window !== 'undefined' &&
   !!window.speechSynthesis &&
@@ -334,9 +353,7 @@ export default function VoiceAssistant() {
         setMessages(prev => [...prev, {
           id: 'mic-permission-' + Date.now(),
           role: 'assistant',
-          text: isBn
-            ? 'মাইক্রোফোন ব্যবহারের অনুমতি নেই। Android app settings থেকে Microphone permission Allow করুন, তারপর আবার চেষ্টা করুন।'
-            : 'Microphone permission is blocked. Allow Microphone permission from Android app settings, then try again.',
+          text: getMicPermissionError(isBn),
           timestamp: new Date()
         }]);
         return;
@@ -374,9 +391,7 @@ export default function VoiceAssistant() {
         setMessages(prev => [...prev, {
           id: 'mic-err-' + Date.now(),
           role: 'assistant',
-          text: isBn 
-            ? 'মাইক্রোফোন ব্যবহারের অনুমতি নেই। Android app settings থেকে Microphone permission Allow করুন, তারপর আবার চেষ্টা করুন।' 
-            : 'Microphone permission denied. Allow Microphone permission from Android app settings, then try again.',
+          text: getMicPermissionError(isBn),
           timestamp: new Date()
         }]);
       }
