@@ -1,11 +1,11 @@
-import { StrictMode, Component, type PropsWithChildren } from 'react';
+import { StrictMode, Component, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { AuthProvider } from './AuthContext';
 
 // Error boundary to catch silent crashes and show them on screen
-interface EBProps { children?: React.ReactNode; }
+interface EBProps { children?: ReactNode; }
 interface EBState { error: Error | null; }
 class ErrorBoundary extends Component<EBProps, EBState> {
   state: EBState = { error: null };
@@ -23,7 +23,7 @@ class ErrorBoundary extends Component<EBProps, EBState> {
         </div>
       );
     }
-    return this.props.children ?? null;
+    return (this as unknown as { props: EBProps }).props.children ?? null;
   }
 }
 

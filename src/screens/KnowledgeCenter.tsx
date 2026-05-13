@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import type { FC } from 'react';
 
 // Seasonal pest calendar for Bangladesh
 const PEST_CALENDAR = [
@@ -110,7 +111,7 @@ Answer:`;
 }
 
 // Collapsible pest season card
-function PestCard({ item }: { item: typeof PEST_CALENDAR[0] }) {
+const PestCard: FC<{ item: typeof PEST_CALENDAR[0] }> = ({ item }) => {
   const [open, setOpen] = useState(false);
   const now = new Date().getMonth();
   const months: Record<string, number[]> = {
@@ -157,7 +158,7 @@ function PestCard({ item }: { item: typeof PEST_CALENDAR[0] }) {
       </AnimatePresence>
     </motion.div>
   );
-}
+};
 
 export default function KnowledgeCenter() {
   const { t } = useApp();

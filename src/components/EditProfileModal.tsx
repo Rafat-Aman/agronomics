@@ -3,6 +3,7 @@ import { X, User, MapPin, Check, Loader2 } from 'lucide-react';
 import { useApp } from '../AppContext';
 import { useAuth } from '../AuthContext';
 import { useState } from 'react';
+import type { FormEvent } from 'react';
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -16,7 +17,7 @@ export default function EditProfileModal({ isOpen, onClose }: EditProfileModalPr
   const [district, setDistrict] = useState(userProfile?.region?.district || '');
   const [loading, setLoading] = useState(false);
 
-  const handleSave = async (e: React.FormEvent) => {
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {

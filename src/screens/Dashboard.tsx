@@ -65,7 +65,7 @@ function FarmStats({ fields }: { fields: Field[] }) {
           <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', stat.color)}>
             <stat.icon className="w-4 h-4" />
           </div>
-          <span className="text-2xl font-black text-on-surface">{stat.value}</span>
+          <span className="font-data text-2xl font-black text-on-surface">{stat.value}</span>
           <span className="text-[9px] font-bold text-on-surface-variant uppercase tracking-wider text-center">{stat.label}</span>
         </div>
       ))}
@@ -528,74 +528,25 @@ export default function Dashboard() {
             <span className="h-[1px] flex-grow bg-outline-variant/30 ml-4" />
           </h3>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-3">
             {[
-              {
-                icon: Sprout,
-                label: t('cropSelection'),
-                desc: t('aiRecommendations'),
-                color: 'text-primary',
-                path: '/tools/crops',
-              },
-              {
-                icon: ScanLine,
-                label: t('diseaseDetection'),
-                desc: t('scanCropDesc'),
-                color: 'text-red-500',
-                path: '/tools/scan',
-              },
-              {
-                icon: MapIcon,
-                label: t('fieldMapping'),
-                desc: t('satelliteAnalysis'),
-                color: 'text-secondary',
-                path: '/fields',
-              },
-              {
-                icon: Lightbulb,
-                label: t('farmingTips'),
-                desc: t('bestPracticesDesc'),
-                color: 'text-tertiary',
-                path: '/tools',
-              },
-              {
-                icon: CloudSun,
-                label: t('weatherForecast'),
-                desc: t('sevenDayOutlook'),
-                color: 'text-sky-500',
-                path: '/weather',
-              },
-              {
-                icon: Mic,
-                label: t('voiceAssistant'),
-                desc: t('banglaEnglishAI'),
-                color: 'text-purple-500',
-                path: '/voice',
-              },
+              { icon: Sprout,   label: t('cropSelection'),    color: 'text-primary',    bg: 'bg-primary/10',    path: '/tools/crops' },
+              { icon: ScanLine, label: t('diseaseDetection'), color: 'text-red-500',    bg: 'bg-red-100',       path: '/tools/scan' },
+              { icon: MapIcon,  label: t('fieldMapping'),     color: 'text-secondary',  bg: 'bg-secondary/10',  path: '/fields' },
+              { icon: Lightbulb,label: t('farmingTips'),      color: 'text-tertiary',   bg: 'bg-tertiary/10',   path: '/tools' },
+              { icon: CloudSun, label: t('weatherForecast'),  color: 'text-sky-500',    bg: 'bg-sky-100',       path: '/weather' },
+              { icon: Mic,      label: t('voiceAssistant'),   color: 'text-purple-500', bg: 'bg-purple-100',    path: '/voice' },
             ].map((tool, i) => (
-              <div
+              <button
                 key={i}
                 onClick={() => navigate(tool.path)}
-                className="bg-surface-container-low hover:bg-surface-container transition-colors rounded-[2rem] p-6 flex flex-col gap-8 group cursor-pointer border border-outline-variant/10"
+                className="bg-surface-container-low hover:bg-surface-container active:scale-95 transition-all duration-200 rounded-2xl p-4 flex flex-col items-center gap-3 border border-outline-variant/10 group"
               >
-                <div
-                  className={cn(
-                    'w-12 h-12 bg-white rounded-2xl flex items-center justify-center editorial-shadow group-hover:scale-110 transition-transform',
-                    tool.color
-                  )}
-                >
-                  <tool.icon className="w-6 h-6" />
+                <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform', tool.bg, tool.color)}>
+                  <tool.icon className="w-5 h-5" />
                 </div>
-
-                <div>
-                  <p className="text-on-surface font-bold text-lg leading-tight">
-                    {tool.label}
-                  </p>
-                  <p className="text-on-surface-variant text-xs mt-1">
-                    {tool.desc}
-                  </p>
-                </div>
-              </div>
+                <p className="text-on-surface font-semibold text-[11px] leading-tight text-center">{tool.label}</p>
+              </button>
             ))}
           </div>
         </section>

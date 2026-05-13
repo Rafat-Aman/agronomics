@@ -1,14 +1,17 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hind+Siliguri:wght@400;500;600;700&family=Public+Sans:wght@700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hind+Siliguri:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Public+Sans:wght@700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", "Hind Siliguri", ui-sans-serif, system-ui, sans-serif;
   --font-headline: "Public Sans", "Hind Siliguri", sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, monospace;
   
   --color-surface: #f5fced;
-  --color-surface-container-low: #eff6e7;
-  --color-surface-container-high: #e3ebdc;
   --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #eff6e7;
+  --color-surface-container: #dce8d3;
+  --color-surface-container-high: #d0dfc7;
+  --color-surface-container-highest: #c4d4ba;
   
   --color-primary: #0d631b;
   --color-primary-container: #2e7d32;
@@ -59,4 +62,19 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Temp range bar in weather forecast */
+.temp-range-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #0b6e8a, #1f6b2e, #a76b00);
+}
+
+.editorial-shadow-sm {
+  box-shadow: 0 1px 4px rgba(23, 29, 20, 0.06), 0 2px 12px rgba(23, 29, 20, 0.04);
+}
+
+.editorial-shadow-md {
+  box-shadow: 0 4px 24px rgba(23, 29, 20, 0.08), 0 1px 4px rgba(23, 29, 20, 0.04);
 }

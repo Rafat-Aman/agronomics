@@ -33,31 +33,33 @@ export default function Layout({ children, showBack, title, hideNav, hideLangTog
 
   return (
     <div className="min-h-screen flex flex-col max-w-md mx-auto bg-surface relative overflow-x-hidden">
-      {/* Top Bar */}
-      <header className="fixed top-0 w-full max-w-md z-50 bg-surface/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          {showBack && (
-            <button 
-              onClick={() => navigate(-1)}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-high/50 hover:bg-surface-container-high transition-colors"
-            >
-              <ChevronLeft className="w-6 h-6 text-primary" />
-            </button>
-          )}
-          <div className="flex items-center gap-2">
-            <Sprout className="w-6 h-6 text-primary" />
-            <h1 className="font-headline font-black text-primary tracking-tight text-lg">
-              {title || t('appName')}
-            </h1>
-          </div>
-        </div>
-        
-        {!hideLangToggle && (
-          <button 
-            onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
-            className="bg-primary/10 px-4 py-1.5 rounded-full font-headline font-bold text-sm text-primary hover:bg-primary/20 transition-all"
+      {/* Top Bar — Agri-OS app bar */}
+      <header className="fixed top-0 w-full max-w-md z-50 bg-surface/92 backdrop-blur-md border-b border-outline-variant/15 px-3 py-2.5 flex items-center gap-2">
+        {showBack ? (
+          <button
+            onClick={() => navigate(-1)}
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors shrink-0"
           >
-            {language === 'en' ? 'BN' : 'EN'}
+            <ChevronLeft className="w-5 h-5 text-on-surface" />
+          </button>
+        ) : (
+          <div className="w-9 h-9 flex items-center justify-center rounded-full bg-primary/10 shrink-0">
+            <Sprout className="w-5 h-5 text-primary" />
+          </div>
+        )}
+
+        <h1 className="flex-1 font-sans font-semibold text-on-surface text-[17px] tracking-[-0.005em] ml-1">
+          {title || t('appName')}
+        </h1>
+
+        {!hideLangToggle && (
+          <button
+            onClick={() => setLanguage(language === 'en' ? 'bn' : 'en')}
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-container transition-colors shrink-0"
+          >
+            <span className="font-data text-[11px] font-semibold text-on-surface-variant/70 tracking-wide">
+              {language === 'en' ? 'বাং' : 'EN'}
+            </span>
           </button>
         )}
       </header>
@@ -73,26 +75,33 @@ export default function Layout({ children, showBack, title, hideNav, hideLangTog
         </motion.div>
       </main>
 
-      {/* Bottom Nav */}
+      {/* Bottom Nav — Material You M3 style */}
       {!hideNav && (
-        <nav className="fixed bottom-0 w-full max-w-md z-50 bg-surface/80 backdrop-blur-md rounded-t-2xl shadow-[0_-4px_32px_rgba(23,29,20,0.06)] flex justify-around items-end pb-6 pt-2 px-4">
+        <nav className="fixed bottom-0 w-full max-w-md z-50 bg-surface/92 backdrop-blur-md border-t border-outline-variant/20 flex justify-around items-center pb-6 pt-2 px-2">
           {navItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
-            
+
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
-                className={cn(
-                  "flex flex-col items-center justify-center transition-all duration-300",
-                  isActive 
-                    ? "bg-gradient-to-br from-primary to-primary-container text-white rounded-2xl px-5 py-2.5 -translate-y-2 shadow-lg"
-                    : "text-on-surface/50 px-4 py-2 hover:text-primary scale-90 active:scale-110"
-                )}
+                className="flex flex-col items-center gap-1 min-w-[60px] transition-all duration-200 active:scale-95"
               >
-                <Icon className={cn("w-6 h-6", isActive && "fill-current")} />
-                <span className="font-sans font-medium text-[10px] uppercase tracking-wider mt-1">
+                {/* Pill indicator around icon */}
+                <div className={cn(
+                  "flex items-center justify-center px-4 py-1.5 rounded-full transition-all duration-200",
+                  isActive ? "bg-primary/15" : "bg-transparent"
+                )}>
+                  <Icon className={cn(
+                    "w-[22px] h-[22px] transition-colors duration-200",
+                    isActive ? "text-primary" : "text-on-surface-variant/50"
+                  )} />
+                </div>
+                <span className={cn(
+                  "text-[11px] transition-colors duration-200",
+                  isActive ? "font-semibold text-primary" : "font-medium text-on-surface-variant/50"
+                )}>
                   {item.label}
                 </span>
               </button>

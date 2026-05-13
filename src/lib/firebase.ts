@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { browserLocalPersistence, getAuth, GoogleAuthProvider, setPersistence } from "firebase/auth";
 import { 
   initializeFirestore, 
   getFirestore,
@@ -31,6 +31,9 @@ if (missing.length > 0) {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
 export const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn('[Firebase] Could not enable persistent auth session:', err);
+});
 
 // Fix for FIRESTORE INTERNAL ASSERTION FAILED (ID: b815 / Unexpected state)
 // Wrap in try-catch to prevent double-initialization during Vite HMR

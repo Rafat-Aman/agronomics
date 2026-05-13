@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import type { FormEvent } from 'react';
 import Layout from '../components/Layout';
 import Anthropic from '@anthropic-ai/sdk';
 import { motion, AnimatePresence } from 'motion/react';
@@ -21,7 +22,15 @@ interface Message {
 }
 
 const SpeechRecognitionAPI =
-  (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  typeof window !== 'undefined'
+    ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    : undefined;
+
+const hasSpeechSynthesis = () =>
+  typeof window !== 'undefined' &&
+  !!window.speechSynthesis &&
+  typeof window.speechSynthesis.getVoices === 'function' &&
+  typeof window.SpeechSynthesisUtterance === 'function';
 
 export default function VoiceAssistant() {
   const [voiceLang, setVoiceLang] = useState<'bn-BD' | 'en-US'>('bn-BD');
@@ -57,8 +66,14 @@ export default function VoiceAssistant() {
 
   // ── Load voices with retries (Chrome loads them async) ───────────────────
   useEffect(() => {
+    if (!hasSpeechSynthesis()) {
+      setBnVoiceAvailable(false);
+      return;
+    }
+
+    const synth = window.speechSynthesis;
     const load = () => {
-      const v = window.speechSynthesis.getVoices();
+      const v = synth.getVoices();
       if (v.length > 0) {
         voicesRef.current = v;
         const hasBn = v.some(
@@ -71,14 +86,14 @@ export default function VoiceAssistant() {
       }
     };
     load();
-    window.speechSynthesis.onvoiceschanged = load;
+    synth.onvoiceschanged = load;
     // Chrome sometimes needs a nudge
     const t1 = setTimeout(load, 200);
     const t2 = setTimeout(load, 1000);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
-      window.speechSynthesis.onvoiceschanged = null;
+      synth.onvoiceschanged = null;
     };
   }, []);
 
@@ -135,11 +150,13 @@ export default function VoiceAssistant() {
 
   // ── TTS using Web Speech API ─────────────────────────────────────────────
   const speakText = useCallback((text: string, lang: 'bn-BD' | 'en-US') => {
-    if (isMuted) return;
-    window.speechSynthesis.cancel();
+    if (isMuted || !hasSpeechSynthesis()) return;
+
+    const synth = window.speechSynthesis;
+    synth.cancel();
 
     const clean = text.replace(/[*_`#>~\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
-    const utterance = new SpeechSynthesisUtterance(clean);
+    const utterance = new window.SpeechSynthesisUtterance(clean);
     utterance.lang = lang;
     utterance.rate = lang === 'bn-BD' ? 0.88 : 0.95;
     utterance.pitch = 1.0;
@@ -168,18 +185,20 @@ export default function VoiceAssistant() {
 
     // Workaround: Chrome pauses long utterances — keepalive workaround
     const keepAlive = setInterval(() => {
-      if (!window.speechSynthesis.speaking) { clearInterval(keepAlive); return; }
-      window.speechSynthesis.pause();
-      window.speechSynthesis.resume();
+      if (!synth.speaking) { clearInterval(keepAlive); return; }
+      synth.pause();
+      synth.resume();
     }, 10000);
     utterance.onend = () => { setIsSpeaking(false); clearInterval(keepAlive); };
     utterance.onerror = () => { setIsSpeaking(false); clearInterval(keepAlive); };
 
-    window.speechSynthesis.speak(utterance);
+    synth.speak(utterance);
   }, [isMuted]);
 
   const stopSpeaking = useCallback(() => {
-    window.speechSynthesis.cancel();
+    if (hasSpeechSynthesis()) {
+      window.speechSynthesis.cancel();
+    }
     setIsSpeaking(false);
   }, []);
 
@@ -229,11 +248,12 @@ export default function VoiceAssistant() {
     // ── Prime speech synthesis SYNCHRONOUSLY before any await ──────────────
     // Chrome drops the user-gesture context after the first await, so we must
     // activate the synthesizer here (while still in the gesture call stack).
-    if (!isMuted) {
-      window.speechSynthesis.cancel();
-      const primer = new SpeechSynthesisUtterance('');
+    if (!isMuted && hasSpeechSynthesis()) {
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const primer = new window.SpeechSynthesisUtterance('');
       primer.volume = 0;
-      window.speechSynthesis.speak(primer);
+      synth.speak(primer);
     }
 
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
@@ -246,6 +266,7 @@ export default function VoiceAssistant() {
         timestamp: new Date(),
       }]);
       setIsThinking(false);
+      isThinkingRef.current = false;
       return;
     }
 
@@ -300,9 +321,28 @@ export default function VoiceAssistant() {
 
 
   // ── Speech Recognition ────────────────────────────────────────────────────
-  const startListening = useCallback(() => {
+  const startListening = useCallback(async () => {
     if (!micSupported || isListening) return;
     stopSpeaking();
+
+    if (navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err) {
+        console.error("Microphone permission check failed:", err);
+        setMessages(prev => [...prev, {
+          id: 'mic-permission-' + Date.now(),
+          role: 'assistant',
+          text: isBn
+            ? 'মাইক্রোফোন ব্যবহারের অনুমতি নেই। Android app settings থেকে Microphone permission Allow করুন, তারপর আবার চেষ্টা করুন।'
+            : 'Microphone permission is blocked. Allow Microphone permission from Android app settings, then try again.',
+          timestamp: new Date()
+        }]);
+        return;
+      }
+    }
+
     const recognition = new SpeechRecognitionAPI();
     recognition.lang = voiceLang;
     recognition.interimResults = true;
@@ -335,15 +375,15 @@ export default function VoiceAssistant() {
           id: 'mic-err-' + Date.now(),
           role: 'assistant',
           text: isBn 
-            ? 'মাইক্রোফোন ব্যবহারের অনুমতি নেই। দয়া করে ব্রাউজার সেটিংসে মাইক্রোফোন সক্রিয় করুন।' 
-            : 'Microphone permission denied. Please enable microphone access in your browser settings.',
+            ? 'মাইক্রোফোন ব্যবহারের অনুমতি নেই। Android app settings থেকে Microphone permission Allow করুন, তারপর আবার চেষ্টা করুন।' 
+            : 'Microphone permission denied. Allow Microphone permission from Android app settings, then try again.',
           timestamp: new Date()
         }]);
       }
     };
     recognition.onend = () => { setIsListening(false); setTranscript(''); };
     recognition.start();
-  }, [micSupported, isListening, voiceLang, stopSpeaking]);
+  }, [micSupported, isListening, voiceLang, stopSpeaking, isBn]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
@@ -387,7 +427,7 @@ export default function VoiceAssistant() {
     setIsSidebarOpen(false);
   };
 
-  const handleTextSend = (e: React.FormEvent) => {
+  const handleTextSend = (e: FormEvent) => {
     e.preventDefault();
     if (!textInput.trim()) return;
     sendToAI(textInput.trim());

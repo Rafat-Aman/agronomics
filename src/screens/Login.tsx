@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useApp } from '../AppContext';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, ArrowRight, Eye } from 'lucide-react';
+import { User, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'motion/react';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { browserLocalPersistence, setPersistence, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
 
 export default function Login() {
@@ -13,12 +13,14 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
     try {
+      await setPersistence(auth, browserLocalPersistence);
       await signInWithEmailAndPassword(auth, email, password);
       navigate('/dashboard');
     } catch (err: any) {
@@ -40,6 +42,7 @@ export default function Login() {
     setError('');
     setIsLoading(true);
     try {
+      await setPersistence(auth, browserLocalPersistence);
       await signInWithPopup(auth, googleProvider);
       navigate('/dashboard');
     } catch (err: any) {
@@ -123,15 +126,20 @@ export default function Login() {
               <div className="relative group">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-outline group-focus-within:text-primary transition-colors" />
                 <input 
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   className="w-full pl-12 pr-12 py-4 bg-surface-container-high rounded-xl border-none focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all text-on-surface placeholder:text-outline-variant"
                   required
                 />
-                <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant hover:text-outline">
-                  <Eye className="w-5 h-5" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-outline-variant hover:text-outline"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
             </div>

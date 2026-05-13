@@ -129,56 +129,45 @@ export default function Weather() {
 
       <div className="relative z-10">
         {/* Top Row */}
-        <div className="flex items-start justify-between mb-4">
+        <div className="flex items-start justify-between mb-5">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-2">
               <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-white/70">Live Weather</span>
+              <span className="font-data text-[10px] font-medium uppercase tracking-[0.08em] text-white/70">
+                {city}, {country} · Live
+              </span>
             </div>
-            <p className="text-white/90 font-bold text-base">{city}, {country}</p>
-            <p className="text-white/60 text-sm capitalize">{description}</p>
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-data font-semibold text-[60px] leading-none tracking-[-0.03em] text-white">{temp}</span>
+              <span className="font-data text-2xl text-white/70 font-medium">°C</span>
+            </div>
+            <p className="text-white/70 text-sm capitalize mt-1 font-medium">{description}</p>
+            <p className="font-data text-[11px] text-white/50 mt-0.5">Feels like {feelsLike}°</p>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Refresh location button */}
+          <div className="flex flex-col items-end gap-3">
             <button
               id="weather-refresh-btn"
               onClick={(e) => { e.stopPropagation(); fetchWeather(true); }}
               disabled={refreshing}
               title="Refresh my location"
-              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 transition-all duration-200 disabled:opacity-50"
+              className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition-all duration-200 disabled:opacity-50 flex items-center justify-center"
             >
               <RotateCcw className={`w-3.5 h-3.5 text-white/70 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
-            <div className="flex items-center gap-1 text-white/50 bg-white/10 rounded-xl px-3 py-1.5">
-              <span className="text-[10px] font-bold">7-Day Forecast</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-            </div>
+            <span className="text-5xl opacity-90">{getWeatherEmoji(mainCondition)}</span>
           </div>
         </div>
 
-        {/* Temp + Emoji */}
-        <div className="flex items-end gap-4 mb-5">
-          <span className="text-7xl">{getWeatherEmoji(mainCondition)}</span>
-          <div>
-            <div className="flex items-baseline gap-1">
-              <span className="font-black text-7xl text-white leading-none">{temp}</span>
-              <span className="text-3xl text-white/60 font-light">°C</span>
-            </div>
-            <p className="text-white/50 text-sm mt-1">Feels like {feelsLike}°C</p>
-          </div>
-        </div>
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
+        {/* Stats Row — backdrop tiles */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
           {[
-            { icon: Droplets, label: 'Humidity', value: `${humidity}%` },
-            { icon: Wind, label: 'Wind', value: `${windSpeed} km/h` },
-            { icon: Eye, label: 'Visibility', value: visibility != null ? `${visibility} km` : `${cloudCover}%` },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="bg-white/10 rounded-2xl p-3 backdrop-blur-sm">
-              <Icon className="w-4 h-4 text-white/60 mb-1" />
-              <p className="text-[9px] font-bold uppercase tracking-wider text-white/50">{label}</p>
-              <p className="text-sm font-bold text-white">{value}</p>
+            { label: 'Humidity', value: `${humidity}%` },
+            { label: 'Wind', value: `${windSpeed}km/h` },
+            { label: 'Visibility', value: visibility != null ? `${visibility}km` : `${cloudCover}%` },
+          ].map(({ label, value }) => (
+            <div key={label} className="bg-white/12 rounded-[14px] px-3 py-2.5 backdrop-blur-sm">
+              <p className="font-data text-[9px] font-medium uppercase tracking-[0.08em] text-white/55">{label}</p>
+              <p className="font-data text-[15px] font-semibold text-white mt-1">{value}</p>
             </div>
           ))}
         </div>

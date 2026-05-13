@@ -199,67 +199,62 @@ export default function WeatherForecast() {
   return (
     <Layout showBack title="Weather Forecast">
       <div className="px-4 sm:px-5 pb-12 space-y-4 sm:space-y-6">
-        {/* Current Conditions Hero */}
+        {/* Current Conditions Hero — dark gradient */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="relative rounded-2xl sm:rounded-[2rem] overflow-hidden p-5 sm:p-6 bg-surface-container-low editorial-shadow-lg"
+          className="relative rounded-2xl sm:rounded-[2rem] overflow-hidden p-5 sm:p-6 editorial-shadow-lg"
+          style={{ background: 'linear-gradient(160deg, #0d3b16, #1f6b2e 40%, #0b6e8a)' }}
         >
-          <div className="absolute -right-10 -top-10 w-40 h-40 sm:w-60 sm:h-60 rounded-full opacity-10 bg-primary" />
-          <div className="flex justify-between items-start">
+          {/* ambient highlight */}
+          <div className="absolute inset-0 pointer-events-none opacity-15"
+            style={{ background: 'radial-gradient(circle at 80% 20%, white 0 30%, transparent 70%)' }} />
+
+          <div className="relative flex justify-between items-start">
             <div>
-              <p className="text-on-surface-variant/50 text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-1 sm:mb-2">Right Now in {current.city}</p>
-              <div className="flex items-baseline gap-1 sm:gap-2">
-                <span className="text-6xl sm:text-7xl md:text-8xl font-headline font-black text-on-surface">{current.temp}</span>
-                <span className="text-2xl sm:text-3xl text-on-surface-variant/40">°C</span>
+              <div className="font-data text-[10px] font-medium tracking-[0.08em] uppercase text-white/60 mb-3">
+                {current.city} · {current.country}
+                {locationLabel && <span className="ml-2 text-white/40">{locationLabel}</span>}
               </div>
-              <p className="text-on-surface-variant capitalize text-sm sm:text-base mt-0.5 sm:mt-1 font-medium">{current.description}</p>
-              <p className="text-on-surface-variant/40 text-xs sm:text-sm">Feels like {current.feelsLike}°C</p>
-              {locationLabel && (
-                <div className="flex items-center gap-1 mt-1.5">
-                  <MapPin className="w-3 h-3 text-on-surface-variant/30" />
-                  <span className="text-[9px] sm:text-[10px] text-on-surface-variant/30 font-semibold uppercase tracking-wider">{locationLabel}</span>
-                </div>
-              )}
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-data font-semibold text-[76px] sm:text-[88px] leading-none tracking-[-0.04em] text-white">
+                  {current.temp}
+                </span>
+                <span className="font-data text-3xl text-white/70 font-medium">°C</span>
+              </div>
+              <p className="text-white/80 capitalize text-sm font-medium mt-2">{current.description}</p>
+              <p className="font-data text-[11px] text-white/50 mt-1">
+                Feels like {current.feelsLike}° · H {current.tempMax}° L {current.tempMin}°
+              </p>
             </div>
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-col items-end gap-3">
               <button
                 id="forecast-refresh-btn"
                 onClick={() => fetchWeather(true)}
                 disabled={refreshing}
                 title="Refresh my location"
-                className="p-2.5 rounded-2xl bg-surface-container-high hover:bg-surface-container-highest active:scale-95 transition-all duration-200 disabled:opacity-40"
+                className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 transition-all duration-200 disabled:opacity-40 flex items-center justify-center"
               >
-                <RotateCcw className={`w-4 h-4 sm:w-5 sm:h-5 text-on-surface-variant/60 ${refreshing ? 'animate-spin' : ''}`} />
+                <RotateCcw className={`w-4 h-4 text-white/70 ${refreshing ? 'animate-spin' : ''}`} />
               </button>
-              <div className="text-4xl sm:text-5xl md:text-6xl">{getWeatherEmoji(current.main)}</div>
+              <span className="text-5xl sm:text-6xl">{getWeatherEmoji(current.main)}</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-5 sm:mt-6">
-            <div className="bg-surface-container-high/50 rounded-xl sm:rounded-2xl p-2.5 sm:p-3">
-              <p className="text-on-surface-variant/40 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold">High / Low</p>
-              <p className="text-on-surface font-bold text-base sm:text-lg mt-0.5">{current.tempMax}° / {current.tempMin}°</p>
-            </div>
-            <div className="bg-surface-container-high/50 rounded-xl sm:rounded-2xl p-2.5 sm:p-3">
-              <p className="text-on-surface-variant/40 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold">Pressure</p>
-              <p className="text-on-surface font-bold text-base sm:text-lg mt-0.5">{current.pressure} hPa</p>
-            </div>
-            <div className="bg-surface-container-high/50 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 flex items-center gap-2">
-              <Droplets className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
-              <div>
-                <p className="text-on-surface-variant/40 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold">Humidity</p>
-                <p className="text-on-surface font-bold text-sm sm:text-base">{current.humidity}%</p>
+          {/* 4-stat grid */}
+          <div className="relative grid grid-cols-4 gap-2 mt-5">
+            {[
+              { label: 'Rain', value: `${forecast[0]?.pop ?? 0}%` },
+              { label: 'Humidity', value: `${current.humidity}%` },
+              { label: 'Wind', value: `${current.wind}km/h` },
+              { label: 'Pressure', value: `${current.pressure}` },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-white/12 rounded-[14px] px-2 py-2.5 backdrop-blur-sm text-center">
+                <p className="font-data text-[8px] font-medium uppercase tracking-[0.08em] text-white/55">{label}</p>
+                <p className="font-data text-[13px] font-semibold text-white mt-1">{value}</p>
               </div>
-            </div>
-            <div className="bg-surface-container-high/50 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 flex items-center gap-2">
-              <Wind className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
-              <div>
-                <p className="text-on-surface-variant/40 text-[9px] sm:text-[10px] uppercase tracking-wider font-bold">Wind</p>
-                <p className="text-on-surface font-bold text-sm sm:text-base">{current.wind} km/h</p>
-              </div>
-            </div>
+            ))}
           </div>
         </motion.div>
 
@@ -283,12 +278,12 @@ export default function WeatherForecast() {
                 >
                   <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wide ${selectedDay === i ? 'text-white/70' : 'text-on-surface-variant/60'}`}>{getDayLabel(day.date, i)}</span>
                   <span className="text-xl sm:text-2xl">{getWeatherEmoji(day.main)}</span>
-                  <span className="font-bold text-xs sm:text-sm">{day.tempMax}°</span>
-                  <span className={`text-[10px] sm:text-xs ${selectedDay === i ? 'text-white/60' : 'text-on-surface-variant/40'}`}>{day.tempMin}°</span>
+                  <span className="font-data font-bold text-xs sm:text-sm">{day.tempMax}°</span>
+                  <span className={`font-data text-[10px] sm:text-xs ${selectedDay === i ? 'text-white/60' : 'text-on-surface-variant/40'}`}>{day.tempMin}°</span>
                   {day.pop > 20 && (
                     <div className="flex items-center gap-1">
                       <Droplets className={`w-2.5 h-2.5 sm:w-3 sm:h-3 ${selectedDay === i ? 'text-blue-200' : 'text-blue-500'}`} />
-                      <span className={`text-[8px] sm:text-[9px] font-bold ${selectedDay === i ? 'text-blue-200' : 'text-blue-500'}`}>{day.pop}%</span>
+                      <span className={`font-data text-[8px] sm:text-[9px] font-bold ${selectedDay === i ? 'text-blue-200' : 'text-blue-500'}`}>{day.pop}%</span>
                     </div>
                   )}
                 </button>
@@ -326,7 +321,7 @@ export default function WeatherForecast() {
                 <div key={label} className="bg-surface-container-high/40 rounded-xl sm:rounded-2xl p-2.5 sm:p-3 flex flex-col gap-0.5 sm:gap-1">
                   <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${color}`} />
                   <p className="text-on-surface-variant/40 text-[8px] sm:text-[9px] uppercase tracking-wider font-bold">{label}</p>
-                  <p className="text-on-surface font-bold text-xs sm:text-sm">{value}</p>
+                  <p className="font-data text-on-surface font-bold text-xs sm:text-sm">{value}</p>
                 </div>
               ))}
             </div>
@@ -393,35 +388,49 @@ export default function WeatherForecast() {
             transition={{ delay: 0.35, duration: 0.5 }}
           >
             <h2 className="text-xs sm:text-sm font-bold uppercase tracking-widest text-on-surface-variant/50 mb-2 sm:mb-3 px-1">Week at a Glance</h2>
-            <div
-              className="rounded-2xl sm:rounded-[2rem] overflow-hidden divide-y border border-outline-variant/10 bg-surface-container-low"
-            >
-              {forecast.map((day, i) => {
-                const advice = getFarmingAdvice(day);
-                const overallLevel = advice.some(a => a.level === 'bad') ? 'bad' : advice.some(a => a.level === 'warn') ? 'warn' : 'good';
-                return (
-                  <div
-                    key={i}
-                    onClick={() => setSelectedDay(i)}
-                    className={`flex items-center px-4 sm:px-5 py-3 sm:py-3.5 gap-3 sm:gap-4 cursor-pointer hover:bg-surface-container-high transition-colors ${selectedDay === i ? 'bg-surface-container-high' : ''}`}
-                  >
-                    <span className="text-xl sm:text-2xl w-6 sm:w-8 text-center">{getWeatherEmoji(day.main)}</span>
-                    <div className="flex-1">
-                      <p className="text-on-surface font-semibold text-xs sm:text-sm">{getDayLabel(day.date, i)}</p>
-                      <p className="text-on-surface-variant/50 text-[10px] sm:text-xs capitalize font-medium">{day.description}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-on-surface font-bold text-xs sm:text-sm">{day.tempMax}° / {day.tempMin}°</p>
-                      <div className="flex items-center gap-1 justify-end mt-0.5">
-                        <Droplets className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-blue-500" />
-                        <span className="text-[9px] sm:text-[10px] text-blue-500 font-bold">{day.pop}%</span>
+            {(() => {
+              const weekMin = Math.min(...forecast.map(d => d.tempMin));
+              const weekMax = Math.max(...forecast.map(d => d.tempMax));
+              const weekRange = weekMax - weekMin || 1;
+              return (
+                <div className="rounded-2xl sm:rounded-[2rem] overflow-hidden divide-y border border-outline-variant/10 bg-surface-container-low">
+                  {forecast.map((day, i) => {
+                    const advice = getFarmingAdvice(day);
+                    const overallLevel = advice.some(a => a.level === 'bad') ? 'bad' : advice.some(a => a.level === 'warn') ? 'warn' : 'good';
+                    const barLeft = ((day.tempMin - weekMin) / weekRange) * 100;
+                    const barWidth = ((day.tempMax - day.tempMin) / weekRange) * 100;
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => setSelectedDay(i)}
+                        className={`flex items-center px-4 sm:px-5 py-3 sm:py-3.5 gap-3 sm:gap-4 cursor-pointer hover:bg-surface-container-high transition-colors ${selectedDay === i ? 'bg-surface-container-high' : ''}`}
+                      >
+                        <span className="text-xl sm:text-2xl w-6 sm:w-8 text-center">{getWeatherEmoji(day.main)}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-on-surface font-semibold text-xs sm:text-sm">{getDayLabel(day.date, i)}</p>
+                          <p className="text-on-surface-variant/50 text-[10px] sm:text-xs capitalize font-medium truncate">{day.description}</p>
+                          {/* temp range bar */}
+                          <div className="relative h-1 rounded-full bg-outline-variant/20 mt-1.5 overflow-visible">
+                            <div
+                              className="absolute h-full rounded-full temp-range-bar"
+                              style={{ left: `${barLeft}%`, width: `${Math.max(barWidth, 6)}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-data text-on-surface font-bold text-xs sm:text-sm">{day.tempMax}° / {day.tempMin}°</p>
+                          <div className="flex items-center gap-1 justify-end mt-0.5">
+                            <Droplets className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-blue-500" />
+                            <span className="font-data text-[9px] sm:text-[10px] text-blue-500 font-bold">{day.pop}%</span>
+                          </div>
+                        </div>
+                        <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full flex-shrink-0 ${overallLevel === 'good' ? 'bg-emerald-500' : overallLevel === 'warn' ? 'bg-orange-500' : 'bg-red-500'}`} />
                       </div>
-                    </div>
-                    <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full flex-shrink-0 ${overallLevel === 'good' ? 'bg-emerald-500' : overallLevel === 'warn' ? 'bg-orange-500' : 'bg-red-500'}`} />
-                  </div>
-                );
-              })}
-            </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <p className="text-center text-on-surface-variant/30 text-[8px] sm:text-[10px] mt-3 uppercase tracking-widest font-bold">● Green: Good  ● Orange: Caution  ● Red: Avoid</p>
           </motion.div>
         )}
