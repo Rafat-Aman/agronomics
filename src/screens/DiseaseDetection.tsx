@@ -142,46 +142,47 @@ export default function DiseaseDetection() {
       const selectedField = fields.find((f: Field) => f.field_id === selectedFieldId);
       const fieldContext = selectedField ? buildFieldContext(selectedField, plantedCrops) : '';
       const hintLine = suspectedDisease.trim()
-        ? `\nFARMER HINT: The farmer suspects this may be "${suspectedDisease.trim().replace(/"/g, "'")}". Weigh this heavily but rely primarily on the visual evidence from Step 1.\n`
+        ? `\nচাষির ধারণা: চাষি মনে করছেন এটি "${suspectedDisease.trim().replace(/"/g, "'")}" হতে পারে। এটি গুরুত্ব দিন, তবে ছবির দৃশ্যমান প্রমাণকে প্রধান ভিত্তি ধরুন।\n`
         : '';
 
-      const prompt = `You are an expert plant pathologist and agronomist specializing in Bangladesh crops.
+      const prompt = `আপনি বাংলাদেশের ফসল নিয়ে কাজ করা একজন বিশেষজ্ঞ উদ্ভিদ রোগতত্ত্ববিদ ও কৃষিবিদ।
 ${fieldContext ? `${fieldContext}\n` : ''}${hintLine}
-Analyze the leaf image above using this 3-step approach:
+উপরের পাতার ছবিটি ৩ ধাপে বিশ্লেষণ করুন। চূড়ান্ত JSON-এর সব মান বাংলায় লিখবেন। রোগ/ফসলের ইংরেজি নাম দরকার হলে বাংলা নামের পরে বন্ধনীর মধ্যে দিন:
 
-STEP 1 — VISUAL CLASSIFICATION (what do you literally see on the leaf?):
-  A) Fungal disease — dark sunken spots with concentric rings (Anthracnose), powdery/fluffy coatings, rust pustules, circular lesions with defined margins, spore bodies
-  B) Bacterial disease — angular water-soaked lesions bounded by leaf veins, bacterial ooze, wilting without spores
-  C) Viral disease — mosaic/mottled colour, distorted leaf shape, yellow vein banding
-  D) Insect/pest damage — irregular holes, skeletonization (veins exposed with tissue removed), visible frass, stippling, rolled or webbed leaves
-  E) Nutrient deficiency — uniform interveinal chlorosis, tip/margin burn in predictable patterns
+ধাপ ১ - দৃশ্যমান শ্রেণিবিভাগ:
+  A) ছত্রাকজনিত রোগ - গাঢ় ডেবে যাওয়া দাগ, বৃত্তাকার বলয়, পাউডার/ফ্লাফি আবরণ, মরিচার মতো দানা, স্পষ্ট কিনারার গোল ক্ষত, স্পোর বডি
+  B) ব্যাকটেরিয়াজনিত রোগ - পাতার শিরা ঘেরা কৌণিক পানি-ভেজা দাগ, ব্যাকটেরিয়ার স্রাব, স্পোর ছাড়া ঢলে পড়া
+  C) ভাইরাসজনিত রোগ - মোজাইক/ছোপ ছোপ রং, পাতার বিকৃতি, হলুদ শিরা
+  D) পোকামাকড়ের ক্ষতি - অনিয়মিত ছিদ্র, পাতার টিস্যু খাওয়া, মল/ফ্রাস, ছোট দাগ, মুড়ানো বা জালযুক্ত পাতা
+  E) পুষ্টির ঘাটতি - শিরার মাঝখানে সমান হলদে ভাব, ডগা/কিনারা পোড়া নির্দিষ্ট প্যাটার্নে
 
-STEP 2 — SPECIFIC DIAGNOSIS:
-Combine the visual symptoms from Step 1 WITH the field context above (crop type, growth stage, soil, history) to name the most likely specific disease. Field context helps confirm likelihood — e.g. knowing it is jute at 20 days helps distinguish Anthracnose from stem rot — but the visual category from Step 1 must not be overridden by crop-pest stereotypes. If the leaf shows fungal lesions, classify as a fungal disease regardless of what pests the crop typically attracts.
+ধাপ ২ - নির্দিষ্ট রোগ নির্ণয়:
+ধাপ ১-এর দৃশ্যমান লক্ষণ এবং উপরের জমির প্রেক্ষাপট মিলিয়ে সবচেয়ে সম্ভাব্য নির্দিষ্ট রোগের নাম দিন। জমির তথ্য সম্ভাবনা যাচাইয়ে সাহায্য করবে, কিন্তু দৃশ্যমান শ্রেণিবিভাগকে অযথা বদলাবে না।
 
-STEP 3 — TREATMENT & PREVENTION:
-Use the field context (soil type, crop age, area size, past history) to tailor every treatment step and prevention tip to this specific field.\n
-Return ONLY valid JSON in this exact structure:
+ধাপ ৩ - চিকিৎসা ও প্রতিরোধ:
+মাটির ধরন, ফসলের বয়স, জমির আয়তন ও আগের ইতিহাস অনুযায়ী প্রতিটি চিকিৎসা ধাপ ও প্রতিরোধ পরামর্শ নির্দিষ্ট করুন।
+
+শুধু বৈধ JSON ফেরত দিন, কোনো Markdown নয়। JSON-এর সব string value বাংলায় হবে:
 {
-  "diagnosisCategory": "Fungal disease | Bacterial disease | Viral disease | Insect/pest damage | Nutrient deficiency",
-  "disease": "Disease name in English and Bengali (e.g. Anthracnose / অ্যানথ্রাকনোজ)",
-  "affectedCrop": "Crop name (e.g. Rice, Wheat, Tomato)",
-  "description": "2-sentence clinical description referencing the specific visual markers observed in the image",
+  "diagnosisCategory": "ছত্রাকজনিত রোগ | ব্যাকটেরিয়াজনিত রোগ | ভাইরাসজনিত রোগ | পোকামাকড়ের ক্ষতি | পুষ্টির ঘাটতি",
+  "disease": "রোগের নাম বাংলায়, প্রয়োজন হলে ইংরেজি বন্ধনীতে",
+  "affectedCrop": "ফসলের নাম বাংলায়, প্রয়োজন হলে ইংরেজি বন্ধনীতে",
+  "description": "ছবিতে দেখা নির্দিষ্ট লক্ষণ উল্লেখ করে ২ বাক্যের ক্লিনিক্যাল বর্ণনা",
   "confidence": "88%",
   "severity": "low | medium | high",
   "treatmentSteps": [
-    "Step 1: Immediate action with specifics",
-    "Step 2: Fungicide/pesticide with specific product name available in Bangladesh",
-    "Step 3: Follow-up care tailored to this field",
-    "Step 4: Monitoring schedule"
+    "ধাপ ১: নির্দিষ্ট তাৎক্ষণিক করণীয়",
+    "ধাপ ২: বাংলাদেশে পাওয়া যায় এমন নির্দিষ্ট ছত্রাকনাশক/কীটনাশক/উপকরণের নাম",
+    "ধাপ ৩: এই জমির অবস্থার সঙ্গে মিলিয়ে পরবর্তী যত্ন",
+    "ধাপ ৪: পর্যবেক্ষণের সময়সূচি"
   ],
   "preventionTips": [
-    "Prevention measure 1",
-    "Prevention measure 2",
-    "Prevention measure 3"
+    "প্রতিরোধ ব্যবস্থা ১",
+    "প্রতিরোধ ব্যবস্থা ২",
+    "প্রতিরোধ ব্যবস্থা ৩"
   ]
 }
-If the image is NOT a plant/leaf, return {"error": "Please upload a clear photo of a plant leaf."}`;
+ছবিটি গাছ/পাতার ছবি না হলে return করুন {"error": "দয়া করে গাছের পাতার পরিষ্কার ছবি আপলোড করুন।"}`;
 
       const response = await client.messages.create({
         model: 'claude-sonnet-4-6',
@@ -243,27 +244,27 @@ If the image is NOT a plant/leaf, return {"error": "Please upload a clear photo 
     setError(null);
     const selectedField = fields.find((f: Field) => f.field_id === selectedFieldId);
     const fieldContext = selectedField ? buildFieldContext(selectedField, plantedCrops) : '';
-    const correctionPrompt = `You are an expert plant pathologist and agronomist specializing in Bangladesh crops.
-The confirmed disease (corrected by the farmer after reviewing visual symptoms) is: "${correctedDisease.trim().replace(/"/g, "'")}"
-Affected crop: "${prediction.affectedCrop}"
+    const correctionPrompt = `আপনি বাংলাদেশের ফসল নিয়ে কাজ করা একজন বিশেষজ্ঞ উদ্ভিদ রোগতত্ত্ববিদ ও কৃষিবিদ।
+চাষি দৃশ্যমান লক্ষণ দেখে রোগটি নিশ্চিত/সংশোধন করেছেন: "${correctedDisease.trim().replace(/"/g, "'")}"
+আক্রান্ত ফসল: "${prediction.affectedCrop}"
 ${fieldContext ? `\n${fieldContext}\n` : ''}
-Generate a complete and accurate treatment plan and prevention tips specifically for ${correctedDisease.trim()} on ${prediction.affectedCrop} in Bangladesh.
-Tailor the treatment steps to the field conditions above.
+বাংলাদেশের প্রেক্ষাপটে ${prediction.affectedCrop} ফসলে ${correctedDisease.trim()} রোগের জন্য সম্পূর্ণ ও সঠিক চিকিৎসা পরিকল্পনা এবং প্রতিরোধ পরামর্শ দিন।
+উপরের জমির অবস্থা অনুযায়ী চিকিৎসা ধাপ নির্দিষ্ট করুন।
 
-Return ONLY valid JSON:
+শুধু বৈধ JSON ফেরত দিন, কোনো Markdown নয়। JSON-এর সব string value বাংলায় হবে:
 {
-  "description": "2-sentence clinical description of ${correctedDisease.trim()} and its spread pattern",
+  "description": "${correctedDisease.trim()} রোগ ও ছড়ানোর ধরন নিয়ে ২ বাক্যের ক্লিনিক্যাল বর্ণনা",
   "severity": "low | medium | high",
   "treatmentSteps": [
-    "Step 1: Immediate action",
-    "Step 2: Fungicide/pesticide with specific product name available in Bangladesh",
-    "Step 3: Follow-up care",
-    "Step 4: Monitoring schedule"
+    "ধাপ ১: তাৎক্ষণিক করণীয়",
+    "ধাপ ২: বাংলাদেশে পাওয়া যায় এমন নির্দিষ্ট ছত্রাকনাশক/কীটনাশক/উপকরণের নাম",
+    "ধাপ ৩: পরবর্তী যত্ন",
+    "ধাপ ৪: পর্যবেক্ষণের সময়সূচি"
   ],
   "preventionTips": [
-    "Prevention measure 1",
-    "Prevention measure 2",
-    "Prevention measure 3"
+    "প্রতিরোধ ব্যবস্থা ১",
+    "প্রতিরোধ ব্যবস্থা ২",
+    "প্রতিরোধ ব্যবস্থা ৩"
   ]
 }`;
     try {
@@ -306,6 +307,24 @@ Return ONLY valid JSON:
     low: 'bg-green-50 text-green-800 border-green-200',
     medium: 'bg-amber-50 text-amber-800 border-amber-200',
     high: 'bg-red-50 text-red-700 border-red-200',
+  };
+  const severityLabel = {
+    low: 'কম',
+    medium: 'মাঝারি',
+    high: 'বেশি',
+  };
+  const categoryLabel: Record<string, string> = {
+    'Fungal disease': 'ছত্রাকজনিত রোগ',
+    'Bacterial disease': 'ব্যাকটেরিয়াজনিত রোগ',
+    'Viral disease': 'ভাইরাসজনিত রোগ',
+    'Insect/pest damage': 'পোকামাকড়ের ক্ষতি',
+    'Nutrient deficiency': 'পুষ্টির ঘাটতি',
+  };
+  const normalizePercent = (value: string) => {
+    const asciiValue = value.replace(/[০-৯]/g, digit => String('০১২৩৪৫৬৭৮৯'.indexOf(digit)));
+    const match = asciiValue.match(/\d+(\.\d+)?/);
+    if (!match) return '0%';
+    return `${Math.max(0, Math.min(100, Number(match[0])))}%`;
   };
 
   return (
@@ -442,34 +461,34 @@ Return ONLY valid JSON:
               {/* Diagnosis Card */}
               <div className="bg-white rounded-[2.5rem] p-7 shadow-xl relative overflow-hidden">
                 <div className={cn('absolute top-6 right-6 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border', severityBg[prediction.severity])}>
-                  {prediction.severity} severity
+                  {severityLabel[prediction.severity]} তীব্রতা
                 </div>
 
                 <div className="space-y-5">
                   {/* Disease name + correction */}
                   <div>
                     <p className="text-primary font-bold text-[10px] uppercase tracking-widest mb-1 flex items-center gap-1">
-                      <Leaf className="w-3 h-3" /> Diagnosis
+                      <Leaf className="w-3 h-3" /> রোগ নির্ণয়
                       {prediction.diagnosisCategory && (
-                        <span className="ml-auto bg-surface-container text-on-surface-variant/70 px-2 py-0.5 rounded-full text-[9px] font-bold">{prediction.diagnosisCategory}</span>
+                        <span className="ml-auto bg-surface-container text-on-surface-variant/70 px-2 py-0.5 rounded-full text-[9px] font-bold">{categoryLabel[prediction.diagnosisCategory] ?? prediction.diagnosisCategory}</span>
                       )}
                     </p>
                     <div className="flex items-start gap-2 flex-wrap">
                       <h2 className="text-3xl font-black text-on-surface leading-tight">{prediction.disease}</h2>
                       {isCorrected && (
                         <span className="mt-2 px-2 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black uppercase tracking-widest rounded-full border border-amber-200 shrink-0">
-                          Farmer corrected
+                          চাষি সংশোধন করেছেন
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-on-surface-variant font-medium mt-1">Affected Crop: <span className="font-bold text-on-surface">{prediction.affectedCrop}</span></p>
+                    <p className="text-sm text-on-surface-variant font-medium mt-1">আক্রান্ত ফসল: <span className="font-bold text-on-surface">{prediction.affectedCrop}</span></p>
 
                     {!isCorrected && (
                       <button
                         onClick={() => { setCorrectedDisease(prediction.disease); setCorrectionOpen((v: boolean) => !v); }}
                         className="mt-2 text-[11px] text-on-surface-variant/50 underline underline-offset-2 hover:text-red-600 transition-colors"
                       >
-                        Incorrect diagnosis?
+                        রোগ নির্ণয় ভুল?
                       </button>
                     )}
 
@@ -477,7 +496,7 @@ Return ONLY valid JSON:
                       {correctionOpen && !isCorrected && (
                         <motion.div key="correction-form" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                           <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl space-y-3">
-                            <p className="text-xs font-bold text-amber-800">Enter the correct disease name:</p>
+                            <p className="text-xs font-bold text-amber-800">সঠিক রোগের নাম লিখুন:</p>
                             <input
                               type="text"
                               value={correctedDisease}
@@ -491,8 +510,8 @@ Return ONLY valid JSON:
                               className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-transform text-sm"
                             >
                               {correcting
-                                ? <><Loader2 className="w-4 h-4 animate-spin" /> Regenerating…</>
-                                : <><RefreshCw className="w-4 h-4" /> Regenerate Treatment Plan</>}
+                                ? <><Loader2 className="w-4 h-4 animate-spin" /> নতুন পরিকল্পনা তৈরি হচ্ছে...</>
+                                : <><RefreshCw className="w-4 h-4" /> চিকিৎসা পরিকল্পনা নতুন করে তৈরি করুন</>}
                             </button>
                           </div>
                         </motion.div>
@@ -503,13 +522,13 @@ Return ONLY valid JSON:
                   {/* Confidence bar */}
                   <div>
                     <div className="flex justify-between text-xs font-bold text-on-surface-variant mb-1">
-                      <span>AI Confidence</span>
+                      <span>এআই আত্মবিশ্বাস</span>
                       <span className="text-primary">{prediction.confidence}</span>
                     </div>
                     <div className="h-2 w-full bg-surface-container rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: prediction.confidence }}
+                        animate={{ width: normalizePercent(prediction.confidence) }}
                         transition={{ duration: 0.8, delay: 0.3 }}
                         className={cn('h-full rounded-full', severityColor[prediction.severity])}
                       />
@@ -520,7 +539,7 @@ Return ONLY valid JSON:
                   <div className="grid grid-cols-3 gap-2">
                     {(['low', 'medium', 'high'] as const).map(s => (
                       <div key={s} className={cn('p-2 rounded-xl text-center text-[10px] font-black uppercase tracking-wider border', prediction.severity === s ? severityBg[s] : 'bg-surface-container text-on-surface-variant/40 border-transparent')}>
-                        {s}
+                        {severityLabel[s]}
                       </div>
                     ))}
                   </div>
@@ -532,7 +551,7 @@ Return ONLY valid JSON:
               {/* Treatment Steps */}
               <div className="bg-white rounded-[2.5rem] p-7 shadow-xl space-y-4">
                 <h3 className="font-black text-lg flex items-center gap-2 text-primary">
-                  <FlaskConical className="w-5 h-5" /> Treatment Plan
+                  <FlaskConical className="w-5 h-5" /> চিকিৎসা পরিকল্পনা
                 </h3>
                 <div className="space-y-3">
                   {prediction.treatmentSteps.map((step, i) => (
@@ -553,7 +572,7 @@ Return ONLY valid JSON:
               {/* Prevention Tips */}
               <div className="bg-green-50 rounded-[2.5rem] p-7 border border-green-200 space-y-4">
                 <h3 className="font-black text-lg flex items-center gap-2 text-green-800">
-                  <ShieldCheck className="w-5 h-5" /> Prevention Tips
+                  <ShieldCheck className="w-5 h-5" /> প্রতিরোধ পরামর্শ
                 </h3>
                 <ul className="space-y-2">
                   {prediction.preventionTips.map((tip, i) => (
@@ -569,22 +588,22 @@ Return ONLY valid JSON:
               {fields.length > 0 && (
                 <div className="bg-white rounded-[2.5rem] p-6 shadow-md border border-outline-variant/10 space-y-3">
                   <h3 className="font-black text-base flex items-center gap-2">
-                    <Sprout className="w-5 h-5 text-primary" /> Update Field Health Status
+                    <Sprout className="w-5 h-5 text-primary" /> জমির স্বাস্থ্য অবস্থা আপডেট করুন
                   </h3>
-                  <p className="text-xs text-on-surface-variant">Mark a field as affected to track its health on your dashboard.</p>
+                  <p className="text-xs text-on-surface-variant">ড্যাশবোর্ডে জমির স্বাস্থ্য ট্র্যাক করতে আক্রান্ত জমি চিহ্নিত করুন।</p>
                   <select
                     value={selectedFieldId}
                     onChange={e => setSelectedFieldId(e.target.value)}
                     className="w-full bg-surface-container-low rounded-xl px-4 py-3 text-sm font-bold border border-outline-variant/20 focus:outline-none focus:ring-2 focus:ring-primary/20"
                   >
-                    <option value="">— Select a field —</option>
+                    <option value="">- জমি নির্বাচন করুন -</option>
                     {fields.map(f => (
                       <option key={f.field_id} value={f.field_id}>{f.field_name}</option>
                     ))}
                   </select>
                   {savedOk ? (
                     <div className="flex items-center gap-2 text-green-700 font-bold text-sm bg-green-50 p-3 rounded-xl">
-                      <CheckCircle2 className="w-5 h-5" /> Field health updated successfully!
+                      <CheckCircle2 className="w-5 h-5" /> জমির স্বাস্থ্য সফলভাবে আপডেট হয়েছে!
                     </div>
                   ) : (
                     <button
@@ -593,7 +612,7 @@ Return ONLY valid JSON:
                       className="w-full bg-primary text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-40 active:scale-[0.98] transition-transform"
                     >
                       {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      {saving ? 'Saving…' : 'Save Health Report to Field'}
+                      {saving ? 'সংরক্ষণ হচ্ছে...' : 'জমিতে স্বাস্থ্য রিপোর্ট সংরক্ষণ করুন'}
                     </button>
                   )}
                 </div>
@@ -609,8 +628,8 @@ Return ONLY valid JSON:
                     <Sprout className="w-5 h-5 text-primary" />
                   </div>
                   <div className="text-left">
-                    <p className="font-bold text-sm text-on-surface">Get Crop Recommendations</p>
-                    <p className="text-xs text-on-surface-variant">Find disease-resistant crops for this field</p>
+                    <p className="font-bold text-sm text-on-surface">ফসলের সুপারিশ নিন</p>
+                    <p className="text-xs text-on-surface-variant">এই জমির জন্য রোগ-সহনশীল ফসল খুঁজুন</p>
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-on-surface-variant/40" />

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { MapPin, Plus, Trash2, Edit2, CheckCircle, XCircle, Navigation, Undo2, Save,
   AlertCircle, TrendingUp, ScanLine, Leaf, ChevronRight, Clock, Droplets,
   FlaskConical, CheckSquare, Square, RefreshCw, Map as MapIcon, Activity, Loader2,
+  History, ChevronDown,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
@@ -15,7 +16,8 @@ import {
   saveDraft, loadDraft, clearDraft, haversineMeters,
   type LatLng, type MapBounds,
 } from '../lib/fieldUtils';
-import { saveFieldWithPolygon, updateField, deleteField, getUserFields } from '../lib/db';
+import { saveFieldWithPolygon, updateField, deleteField, getUserFields, getCropRecommendationHistory } from '../lib/db';
+import type { CropRecHistoryEntry } from '../lib/db';
 import Anthropic from '@anthropic-ai/sdk';
 import type { Field } from '../types';
 
@@ -61,6 +63,11 @@ function FieldDetailPanel({
   const [soilPh, setSoilPh] = useState(selected.soil_summary?.ph ?? 7);
   const [updatingSoil, setUpdatingSoil] = useState(false);
   const [soilSaved, setSoilSaved] = useState(false);
+
+  // Crop recommendation history state
+  const [fieldRecs, setFieldRecs] = useState<CropRecHistoryEntry[]>([]);
+  const [fieldRecsLoading, setFieldRecsLoading] = useState(false);
+  const [showFieldRecs, setShowFieldRecs] = useState(false);
 
   const healthColors: Record<string, string> = {
     healthy: 'bg-green-100 text-green-800 border-green-300',
@@ -409,6 +416,85 @@ Provide exactly 5 chronological phases. Keep tasks brief.`;
             {t('loadAiRoadmap')}
           </button>
         )}
+      </div>
+
+      {/* Previous AI Recommendations */}
+      <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant/10 overflow-hidden">
+        <button
+          onClick={async () => {
+            const next = !showFieldRecs;
+            setShowFieldRecs(next);
+            if (next && fieldRecs.length === 0 && selected.field_id) {
+              setFieldRecsLoading(true);
+              try {
+                const all = await getCropRecommendationHistory(uid, 50);
+                setFieldRecs(all.filter(e => e.field_id === selected.field_id).slice(0, 5));
+              } catch (e) { console.error(e); }
+              finally { setFieldRecsLoading(false); }
+            }
+          }}
+          className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-surface-container-low transition-colors"
+        >
+          <span className="flex items-center gap-2 text-sm font-black">
+            <History className="w-4 h-4 text-primary" />
+            {t('prevRecommendations')}
+            {fieldRecs.length > 0 && (
+              <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded-full">{fieldRecs.length}</span>
+            )}
+          </span>
+          <ChevronDown className={cn('w-4 h-4 text-on-surface-variant transition-transform', showFieldRecs && 'rotate-180')} />
+        </button>
+        <AnimatePresence>
+          {showFieldRecs && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+              <div className="px-4 pb-4 space-y-2 border-t border-outline-variant/10 pt-3">
+                {fieldRecsLoading && (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                  </div>
+                )}
+                {!fieldRecsLoading && fieldRecs.length === 0 && (
+                  <p className="text-xs text-center text-on-surface-variant py-4">{t('noRecsForField')}</p>
+                )}
+                {!fieldRecsLoading && fieldRecs.map((entry, ei) => {
+                  const formatDate = (ts: any) => {
+                    if (!ts) return '';
+                    const d = ts.toDate ? ts.toDate() : new Date(ts);
+                    return d.toLocaleDateString('bn-BD', { day: 'numeric', month: 'short', year: 'numeric' });
+                  };
+                  return (
+                    <div key={entry.id || ei} className="bg-surface-container-low rounded-2xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-on-surface-variant">{formatDate(entry.generated_at)}</span>
+                        <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">{entry.results.length} ফসল</span>
+                      </div>
+                      <div className="space-y-1">
+                        {entry.results.slice(0, 3).map((crop, ci) => (
+                          <button
+                            key={ci}
+                            onClick={() => navigate(`/tools/crops/roadmap?crop=${encodeURIComponent(crop.cropName)}&fieldId=${selected.field_id}`)}
+                            className="w-full flex items-center justify-between bg-surface-container-lowest hover:bg-primary/5 rounded-xl px-3 py-2 transition-colors text-left"
+                          >
+                            <span className="text-xs font-bold">#{ci + 1} {crop.cropName}</span>
+                            <span className="text-xs font-black text-primary shrink-0 ml-2">{crop.suitability}%</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {!fieldRecsLoading && (
+                  <button
+                    onClick={() => navigate(`/tools/crops`)}
+                    className="w-full text-center text-xs font-bold text-primary pt-1 hover:underline"
+                  >
+                    সব সুপারিশ দেখুন →
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Delete */}

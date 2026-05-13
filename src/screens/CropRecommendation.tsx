@@ -157,6 +157,7 @@ export default function CropRecommendation() {
 
   const getRecommendation = async () => {
     if (!uid) { setError('Please log in first.'); return; }
+    if (!selectedField) { setError(t('fieldRequired')); return; }
     if (!n || !p || !k) { setError('Please enter NPK values.'); return; }
     const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
     if (!apiKey) { setError('Anthropic API key missing.'); return; }
@@ -324,22 +325,31 @@ export default function CropRecommendation() {
             <motion.div key="new" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6">
 
               {/* Field Selector */}
-              <div className="bg-surface-container-lowest rounded-[2rem] p-5 border border-outline-variant/10 shadow-sm space-y-3">
-                <h3 className="font-black text-base flex items-center gap-2"><MapPin className="w-4 h-4 text-primary" />{t('selectField')}</h3>
+              <div className={cn("bg-surface-container-lowest rounded-[2rem] p-5 border shadow-sm space-y-3 transition-all",
+                selectedField ? 'border-outline-variant/10' : 'border-amber-300/60 bg-amber-50/30')}>
+                <h3 className="font-black text-base flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-primary" />
+                  {t('selectField')}
+                  <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full uppercase tracking-wider">আবশ্যক</span>
+                </h3>
                 <div className="relative">
                   <button onClick={() => setFieldOpen(o => !o)}
-                    className="w-full bg-surface-container-low rounded-xl px-4 py-3 text-sm font-bold text-left flex items-center justify-between border border-outline-variant/20">
-                    <span className={selectedField ? 'text-on-surface' : 'text-on-surface-variant'}>
+                    className={cn("w-full bg-surface-container-low rounded-xl px-4 py-3 text-sm font-bold text-left flex items-center justify-between border transition-all",
+                      selectedField ? 'border-outline-variant/20' : 'border-amber-300/60')}>
+                    <span className={selectedField ? 'text-on-surface' : 'text-amber-700/70'}>
                       {selectedField ? `${selectedField.field_name} · ${selectedField.area_size} ${selectedField.area_unit}` : t('noFieldSelected')}
                     </span>
                     <ChevronDown className={cn('w-4 h-4 transition-transform', fieldOpen && 'rotate-180')} />
                   </button>
                   {fieldOpen && (
                     <div className="absolute z-20 mt-1 w-full bg-surface-container-lowest rounded-2xl shadow-xl border border-outline-variant/20 overflow-hidden">
-                      <button onClick={() => { setSelectedField(null); setFieldOpen(false); }}
-                        className="w-full px-4 py-3 text-sm text-left text-on-surface-variant hover:bg-surface-container-low transition-colors">
-                        {t('noneDeviceLocation')}
-                      </button>
+                  <button onClick={() => { setSelectedField(null); setFieldOpen(false); }}
+                    disabled
+                    className="w-full px-4 py-3 text-sm text-left text-on-surface-variant/40 cursor-not-allowed flex items-center gap-2"
+                  >
+                    <span className="text-[10px] font-bold bg-error-container text-on-error-container px-2 py-0.5 rounded-full">জমি আবশ্যক</span>
+                    {t('noneDeviceLocation')}
+                  </button>
                       {fields.length === 0 && <p className="px-4 py-3 text-sm text-on-surface-variant">{t('noSavedFields')}</p>}
                       {fields.map(f => (
                         <button key={f.field_id} onClick={() => { setSelectedField(f); setFieldOpen(false); }}
@@ -351,7 +361,12 @@ export default function CropRecommendation() {
                     </div>
                   )}
                 </div>
-
+                {!selectedField && (
+                  <p className="text-[11px] font-bold text-amber-600 flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    {t('fieldRequired')}
+                  </p>
+                )}
               </div>
 
               {/* Weather Badge */}
@@ -416,7 +431,7 @@ export default function CropRecommendation() {
                   </div>
                 </div>
 
-                <button onClick={getRecommendation} disabled={loading || !n || !p || !k}
+                <button onClick={getRecommendation} disabled={loading || !n || !p || !k || !selectedField}
                   className="w-full bg-primary text-on-primary py-4 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform">
                   {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <TrendingUp className="w-5 h-5" />}
                   {loading ? t('analyzing') : saving ? t('savingLabel') : t('getRecommendations')}
