@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import Layout from '../components/Layout';
 import Anthropic from '@anthropic-ai/sdk';
@@ -68,65 +68,48 @@ export default function CropRoadmap() {
     }
   };
 
-  useEffect(() => {
-    const fetchRoadmap = async () => {
-      if (!cropName) {
-        setError("ফসলের নাম পাওয়া যায়নি।");
-        setLoading(false);
-        return;
-      }
+  const fetchRoadmap = useCallback(async () => {
+    if (!cropName) { setError("ফসলের নাম পাওয়া যায়নি।"); setLoading(false); return; }
+    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+    if (!apiKey) { setError('এপিআই কী নেই।'); setLoading(false); return; }
 
-      const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
-      if (!apiKey) {
-        setError('এপিআই কী নেই।');
-        setLoading(false);
-        return;
-      }
+    setLoading(true); setError(null); setData(null);
+    try {
+      const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+      const prompt = `আপনি বাংলাদেশের একজন কৃষি বিশেষজ্ঞ। "${cropName}" ফসলের চাষাবাদ রোডম্যাপ সংক্ষিপ্তভাবে বাংলায় দিন।
 
-      try {
-        const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-        const prompt = `আপনি বাংলাদেশের একজন বিশেষজ্ঞ কৃষিবিদ। "${cropName}" ফসলের জন্য শুরু থেকে ফসল কাটা পর্যন্ত অত্যন্ত বাস্তবসম্মত ও বিস্তারিত ধাপে ধাপে চাষাবাদ রোডম্যাপ প্রদান করুন।
-        সমস্ত তথ্য বাংলা ভাষায় লিখুন। নিচের সঠিক JSON কাঠামোতে উত্তর দিন:
-        {
-          "phases": [
-            {
-              "phaseName": "যেমন: জমি প্রস্তুতি ও বীজ বপন",
-              "duration": "যেমন: ১ম থেকে ১৫তম দিন",
-              "tasks": ["নির্দিষ্ট কাজ ১", "নির্দিষ্ট কাজ ২"],
-              "resourcesNeeded": ["যেমন: ট্র্যাক্টর", "যেমন: ৫০ কেজি ইউরিয়া", "যেমন: ২০ কেজি বীজ"],
-              "potentialRisks": ["যেমন: ভারী বৃষ্টিতে বীজ ভেসে যেতে পারে", "যেমন: আগাছার বৃদ্ধি"],
-              "tips": "এই পর্যায়ের জন্য বিশেষজ্ঞ কৃষি পরামর্শ"
-            }
-          ],
-          "estimatedTotalDuration": "যেমন: ১২০ দিন"
-        }
-        মার্কডাউন ফরম্যাটিং ব্যবহার করবেন না, শুধু JSON স্ট্রিং দিন। কমপক্ষে ৪ থেকে ৫টি স্বতন্ত্র কালানুক্রমিক পর্যায় নিশ্চিত করুন। কাজ, সম্পদ এবং ঝুঁকিগুলো ফসল-নির্দিষ্ট ও একজন কৃষকের জন্য বাস্তবসম্মত করুন।`;
+কঠোর নিয়ম (অবশ্যই মানতে হবে):
+- ঠিক ৪টি পর্যায় (phases)
+- প্রতি পর্যায়ে সর্বোচ্চ ৩টি tasks (প্রতিটি ১৫ শব্দের মধ্যে)
+- প্রতি পর্যায়ে সর্বোচ্চ ৩টি resourcesNeeded (শুধু নাম ও পরিমাণ)
+- প্রতি পর্যায়ে সর্বোচ্চ ২টি potentialRisks (সংক্ষিপ্ত)
+- tips: সর্বোচ্চ ১টি বাক্য
 
-        const response = await client.messages.stream({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 8192,
-          messages: [{ role: 'user', content: prompt }],
-        }).finalMessage();
+শুধু JSON দিন, কোনো মার্কডাউন নয়:
+{"phases":[{"phaseName":"","duration":"","tasks":[],"resourcesNeeded":[],"potentialRisks":[],"tips":""}],"estimatedTotalDuration":""}`;
 
-        const text = response.content[0].type === 'text' ? response.content[0].text : '';
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('Invalid AI response format');
+      const response = await client.messages.stream({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8192,
+        messages: [{ role: 'user', content: prompt }],
+      }).finalMessage();
 
-        const parsedData = JSON.parse(jsonMatch[0]);
-        setData(parsedData);
-      } catch (err: any) {
-        console.error('Roadmap Error:', err);
-        const isBusy = err.message?.includes('503') || err.message?.toLowerCase().includes('demand') || err.message?.toLowerCase().includes('busy');
-        setError(isBusy
-          ? 'এআই সিস্টেম সাময়িকভাবে অতিরিক্ত চাপে রয়েছে। কয়েক সেকেন্ড পরে আবার চেষ্টা করুন।'
-          : `রোডম্যাপ তৈরি করতে ব্যর্থ হয়েছে: ${err.message}`);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRoadmap();
+      const text = response.content[0].type === 'text' ? response.content[0].text : '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('Invalid AI response format');
+      setData(JSON.parse(jsonMatch[0]));
+    } catch (err: any) {
+      console.error('Roadmap Error:', err);
+      const isBusy = err.message?.includes('503') || err.message?.toLowerCase().includes('demand') || err.message?.toLowerCase().includes('busy');
+      setError(isBusy
+        ? 'এআই সিস্টেম সাময়িকভাবে অতিরিক্ত চাপে রয়েছে।'
+        : 'রোডম্যাপ তৈরি করতে ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
+    } finally {
+      setLoading(false);
+    }
   }, [cropName]);
+
+  useEffect(() => { fetchRoadmap(); }, [fetchRoadmap]);
 
   return (
     <Layout title="চাষাবাদ রোডম্যাপ" showBack>
@@ -141,9 +124,15 @@ export default function CropRoadmap() {
         )}
 
         {error && (
-          <div className="bg-error-container text-on-error-container p-5 rounded-[2rem] flex gap-3 border border-error/10">
-            <AlertCircle className="w-5 h-5 shrink-0" />
-            <p className="text-sm font-bold">{error}</p>
+          <div className="bg-error-container text-on-error-container p-5 rounded-[2rem] flex flex-col gap-3 border border-error/10">
+            <div className="flex gap-3">
+              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+              <p className="text-sm font-bold">{error}</p>
+            </div>
+            <button onClick={fetchRoadmap}
+              className="self-start bg-on-error-container text-error-container text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2">
+              <Loader2 className="w-3.5 h-3.5" /> আবার চেষ্টা করুন
+            </button>
           </div>
         )}
 
