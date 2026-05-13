@@ -16,6 +16,7 @@ import CropDetail from './screens/CropDetail';
 import VoiceAssistant from './screens/VoiceAssistant';
 import WeatherForecast from './screens/WeatherForecast';
 import GuideDetail from './screens/GuideDetail';
+import IrrigationAdvisor from './screens/IrrigationAdvisor';
 import { AnimatePresence } from 'motion/react';
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="/my-crops/:cropId" element={<CropDetail />} />
             <Route path="/voice" element={<VoiceAssistant />} />
             <Route path="/weather" element={<WeatherForecast />} />
+            <Route path="/irrigation" element={<IrrigationAdvisor />} />
             <Route path="/guide" element={<GuideDetail />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

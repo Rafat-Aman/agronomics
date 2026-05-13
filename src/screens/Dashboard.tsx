@@ -530,12 +530,62 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-3 gap-3">
             {[
-              { icon: Sprout,   label: t('cropSelection'),    color: 'text-primary',    bg: 'bg-primary/10',    path: '/tools/crops' },
-              { icon: ScanLine, label: t('diseaseDetection'), color: 'text-red-500',    bg: 'bg-red-100',       path: '/tools/scan' },
-              { icon: MapIcon,  label: t('fieldMapping'),     color: 'text-secondary',  bg: 'bg-secondary/10',  path: '/fields' },
-              { icon: Lightbulb,label: t('farmingTips'),      color: 'text-tertiary',   bg: 'bg-tertiary/10',   path: '/tools' },
-              { icon: CloudSun, label: t('weatherForecast'),  color: 'text-sky-500',    bg: 'bg-sky-100',       path: '/weather' },
-              { icon: Mic,      label: t('voiceAssistant'),   color: 'text-purple-500', bg: 'bg-purple-100',    path: '/voice' },
+              {
+                icon: Sprout,
+                label: t('cropSelection'),
+                desc: t('aiRecommendations'),
+                color: 'text-primary',
+                bg: 'bg-primary/10',
+                path: '/tools/crops',
+              },
+              {
+                icon: ScanLine,
+                label: t('diseaseDetection'),
+                desc: t('scanCropDesc'),
+                color: 'text-red-500',
+                bg: 'bg-red-100',
+                path: '/tools/scan',
+              },
+              {
+                icon: MapIcon,
+                label: t('fieldMapping'),
+                desc: t('satelliteAnalysis'),
+                color: 'text-secondary',
+                bg: 'bg-secondary/10',
+                path: '/fields',
+              },
+              {
+                icon: Lightbulb,
+                label: t('farmingTips'),
+                desc: t('bestPracticesDesc'),
+                color: 'text-tertiary',
+                bg: 'bg-tertiary/10',
+                path: '/tools',
+              },
+              {
+                icon: CloudSun,
+                label: t('weatherForecast'),
+                desc: t('sevenDayOutlook'),
+                color: 'text-sky-500',
+                bg: 'bg-sky-100',
+                path: '/weather',
+              },
+              {
+                icon: Droplets,
+                label: 'Smart Irrigation',
+                desc: 'Land moisture & watering schedule',
+                color: 'text-blue-500',
+                bg: 'bg-blue-100',
+                path: '/irrigation',
+              },
+              {
+                icon: Mic,
+                label: t('voiceAssistant'),
+                desc: t('banglaEnglishAI'),
+                color: 'text-purple-500',
+                bg: 'bg-purple-100',
+                path: '/voice',
+              },
             ].map((tool, i) => (
               <button
                 key={i}
