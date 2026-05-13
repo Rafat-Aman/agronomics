@@ -32,9 +32,9 @@ function CropCard({ crop, idx, onClick, onSync }: { crop: CropRecResult; idx: nu
           <div className="h-2 w-24 bg-surface-container-high rounded-full overflow-hidden">
             <div className="h-full bg-primary" style={{ width: `${crop.suitability}%` }} />
           </div>
-          <span className="text-xs font-bold text-primary">{crop.suitability}% Match</span>
+          <span className="text-xs font-bold text-primary">{crop.suitability}% মিল</span>
         </div>
-        {crop.growingSeason && <p className="text-xs text-on-surface-variant mb-3 font-medium">🌱 Season: {crop.growingSeason}</p>}
+        {crop.growingSeason && <p className="text-xs text-on-surface-variant mb-3 font-medium">🌱 মৌসুম: {crop.growingSeason}</p>}
       </div>
       {crop.reasons?.length > 0 && (
         <div className="mb-4 space-y-1">
@@ -45,21 +45,21 @@ function CropCard({ crop, idx, onClick, onSync }: { crop: CropRecResult; idx: nu
       )}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-surface-container-low p-3 rounded-2xl">
-          <p className="text-[9px] font-bold text-on-surface-variant mb-1 uppercase">Expected Yield</p>
+          <p className="text-[9px] font-bold text-on-surface-variant mb-1 uppercase">প্রত্যাশিত ফলন</p>
           <p className="text-lg font-black">{crop.expectedYield}</p>
         </div>
         <div className="bg-surface-container-low p-3 rounded-2xl">
-          <p className="text-[9px] font-bold text-on-surface-variant mb-1 uppercase">Est. Profit</p>
+          <p className="text-[9px] font-bold text-on-surface-variant mb-1 uppercase">আনু. মুনাফা</p>
           <p className="text-lg font-black text-tertiary">{crop.estimatedProfit}</p>
         </div>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
         <span className={cn('px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider',
-          crop.demand?.toLowerCase().includes('high') ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800')}>
+          (crop.demand?.toLowerCase().includes('high') || crop.demand?.includes('উচ্চ')) ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800')}>
           {crop.demand}
         </span>
         <span className={cn('px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1',
-          crop.riskLevel?.toLowerCase().includes('low') ? 'bg-surface-container text-on-surface' : 'bg-red-100 text-red-800')}>
+          (crop.riskLevel?.toLowerCase().includes('low') || crop.riskLevel?.includes('কম')) ? 'bg-surface-container text-on-surface' : 'bg-red-100 text-red-800')}>
           <ShieldCheck className="w-3 h-3" />{crop.riskLevel}
         </span>
       </div>
@@ -71,7 +71,7 @@ function CropCard({ crop, idx, onClick, onSync }: { crop: CropRecResult; idx: nu
         className="mt-4 w-full bg-primary/10 hover:bg-primary hover:text-white text-primary text-xs font-bold py-3 rounded-xl transition-all flex items-center justify-center gap-2"
       >
         <Plus className="w-4 h-4" />
-        Sync to My Fields
+        আমার মাঠে যোগ করুন
       </button>
     </motion.div>
   );
@@ -108,6 +108,7 @@ export default function CropRecommendation() {
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<CropRecHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [selectedHistoryField, setSelectedHistoryField] = useState<string | null>(null);
 
   // Load user fields
   useEffect(() => {
@@ -119,7 +120,7 @@ export default function CropRecommendation() {
   useEffect(() => {
     if (tab !== 'history' || !uid) return;
     setHistoryLoading(true);
-    getCropRecommendationHistory(uid).then(setHistory).catch(console.error).finally(() => setHistoryLoading(false));
+    getCropRecommendationHistory(uid, 50).then(setHistory).catch(console.error).finally(() => setHistoryLoading(false));
   }, [tab, uid]);
 
   const fetchWeather = useCallback(async (lat: number, lng: number) => {
@@ -184,40 +185,39 @@ export default function CropRecommendation() {
         ? `Selected field: "${selectedField.field_name}", area: ${selectedField.area_size} ${selectedField.area_unit}, GPS: ${selectedField.center_point.lat.toFixed(4)}, ${selectedField.center_point.lng.toFixed(4)}.`
         : 'No specific field selected.';
 
-      const prompt = `You are an expert agronomist specializing in Bangladesh agriculture.
+      const prompt = `আপনি বাংলাদেশ কৃষিতে বিশেষজ্ঞ একজন কৃষিবিদ।
 
-TODAY'S DATE: ${dateStr}
-CURRENT FARMING SEASON: ${currentSeason}
+আজকের তারিখ: ${dateStr}
+বর্তমান কৃষি মৌসুম: ${currentSeason}
 
-IMPORTANT SEASON RULE: Only recommend crops that are appropriate to SOW or PLANT during this exact month (${now.toLocaleString('en-US', { month: 'long' })}). Do NOT recommend crops whose sowing window has already passed or hasn't started yet. Potato sowing season in Bangladesh is November–December — do not recommend it in April/May/June.
+গুরুত্বপূর্ণ নিয়ম: শুধুমাত্র এই মাসে (${now.toLocaleString('bn-BD', { month: 'long' })}) বপন বা রোপণের উপযুক্ত ফসল সুপারিশ করুন। যেসব ফসলের বপনের সময় শেষ হয়ে গেছে বা এখনও শুরু হয়নি সেগুলো সুপারিশ করবেন না।
 
-FIELD CONTEXT: ${fieldCtx}
-WEATHER: ${weatherCtx}
-SOIL DATA:
-- Type: ${soilType}
-- pH: ${ph || 'unknown'}
-- NPK: Nitrogen=${n} mg/kg, Phosphorus=${p} mg/kg, Potassium=${k} mg/kg
-- Moisture: ${moisture || 'not specified'}
-- Fertility Level: ${fertility}
+মাঠের তথ্য: ${fieldCtx}
+আবহাওয়া: ${weatherCtx}
+মাটির তথ্য:
+- ধরন: ${soilType}
+- pH: ${ph || 'অজানা'}
+- NPK: নাইট্রোজেন=${n} mg/kg, ফসফরাস=${p} mg/kg, পটাশিয়াম=${k} mg/kg
+- আর্দ্রতা: ${moisture || 'উল্লেখ নেই'}
+- উর্বরতা স্তর: ${fertility}
 
-Based on ALL the above data, recommend exactly 3 crops most suitable for planting in ${now.toLocaleString('en-US', { month: 'long' })} in Bangladesh.
-For each crop, confirm it is in-season right now and provide specific reasons linking to the soil, weather, and field conditions.
+উপরের সমস্ত তথ্যের ভিত্তিতে বাংলাদেশে এই মাসে চাষের জন্য সবচেয়ে উপযুক্ত ৩টি ফসল সুপারিশ করুন।
 
-Return ONLY valid JSON (no markdown):
+শুধুমাত্র বৈধ JSON ফেরত দিন (কোনো মার্কডাউন নয়), সম্পূর্ণ বাংলায়:
 {
   "recommendations": [
     {
-      "cropName": "Crop name (English & Bengali)",
+      "cropName": "ফসলের নাম (বাংলা ও ইংরেজি)",
       "suitability": 95,
-      "reasons": ["Reason tied to weather/soil data", "Another specific reason"],
-      "growingSeason": "e.g., June–October (Kharif)",
-      "expectedYield": "e.g., 4.2 MT/ha",
-      "estimatedProfit": "e.g., +৳84,200",
-      "riskLevel": "Low Risk",
-      "demand": "High Demand"
+      "reasons": ["মাটি/আবহাওয়ার সাথে সম্পর্কিত কারণ", "আরেকটি নির্দিষ্ট কারণ"],
+      "growingSeason": "যেমন: জুন–অক্টোবর (খরিফ)",
+      "expectedYield": "যেমন: ৪.২ টন/হেক্টর",
+      "estimatedProfit": "যেমন: +৳৮৪,২০০",
+      "riskLevel": "কম ঝুঁকি",
+      "demand": "উচ্চ চাহিদা"
     }
   ],
-  "summary": "2-sentence insight on why these crops are best given current weather and soil."
+  "summary": "বর্তমান আবহাওয়া ও মাটির ভিত্তিতে কেন এই ফসলগুলো সেরা তা নিয়ে ২টি বাক্যে সংক্ষিপ্ত বিশ্লেষণ।"
 }`;
 
       const response = await client.messages.create({
@@ -300,11 +300,11 @@ Return ONLY valid JSON (no markdown):
       <div className="px-6 pb-24 space-y-6">
         {/* Header */}
         <div>
-          <span className="inline-block bg-primary-container text-on-primary px-3 py-1 rounded-full text-[10px] font-bold tracking-wider mb-2 uppercase">AI Recommendation Engine</span>
+          <span className="inline-block bg-primary-container text-on-primary px-3 py-1 rounded-full text-[10px] font-bold tracking-wider mb-2 uppercase">এআই সুপারিশ ইঞ্জিন</span>
           <h1 className="text-4xl font-black text-on-surface tracking-tight leading-tight">
-            Optimize Your <span className="text-primary italic">Harvest</span>
+            আপনার <span className="text-primary italic">ফসল</span> অপ্টিমাইজ করুন
           </h1>
-          <p className="text-on-surface-variant text-sm mt-2">Field-aware AI crop recommendations powered by weather & soil data.</p>
+          <p className="text-on-surface-variant text-sm mt-2">আবহাওয়া ও মাটির তথ্য ব্যবহার করে মাঠ-সচেতন এআই ফসল সুপারিশ।</p>
         </div>
 
         {/* Tabs */}
@@ -471,44 +471,105 @@ Return ONLY valid JSON (no markdown):
                   <button onClick={() => setTab('new')} className="mt-4 bg-primary text-white px-6 py-2.5 rounded-xl font-bold text-sm">{t('getStartedBtn')}</button>
                 </div>
               )}
-              {history.map(entry => (
-                <div key={entry.id} className="bg-surface-container-lowest rounded-[2rem] p-5 border border-outline-variant/10 shadow-sm space-y-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-black text-lg">{entry.field_name}</p>
-                      <p className="text-xs text-on-surface-variant mt-0.5">
-                        {entry.field_area && `${entry.field_area} · `}
-                        {entry.soil.type} · pH {entry.soil.ph || '?'} · N{entry.soil.n}/P{entry.soil.p}/K{entry.soil.k}
-                      </p>
-                      {entry.weather && (
-                        <p className="text-xs text-on-surface-variant mt-0.5">
-                          📍 {entry.weather.city} · {entry.weather.temp}°C · {entry.weather.humidity}% humidity
-                        </p>
-                      )}
+
+              {!historyLoading && history.length > 0 && (() => {
+                // Derive unique fields from history
+                const fieldMap = new Map<string, { name: string; count: number }>();
+                history.forEach(e => {
+                  const key = e.field_id || e.field_name;
+                  const prev = fieldMap.get(key);
+                  fieldMap.set(key, { name: e.field_name, count: (prev?.count ?? 0) + 1 });
+                });
+                const uniqueFields = Array.from(fieldMap.entries()).map(([id, v]) => ({ id, ...v }));
+                const filteredHistory = selectedHistoryField
+                  ? history.filter(e => (e.field_id || e.field_name) === selectedHistoryField)
+                  : history;
+
+                const formatDate = (ts: any) => {
+                  if (!ts) return '';
+                  const d = ts.toDate ? ts.toDate() : new Date(ts);
+                  return d.toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' });
+                };
+
+                return (
+                  <>
+                    {/* Field filter chips */}
+                    <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+                      <button
+                        onClick={() => setSelectedHistoryField(null)}
+                        className={cn('shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all',
+                          !selectedHistoryField ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant')}>
+                        সব মাঠ ({history.length})
+                      </button>
+                      {uniqueFields.map(f => (
+                        <button key={f.id}
+                          onClick={() => setSelectedHistoryField(f.id)}
+                          className={cn('shrink-0 px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap',
+                            selectedHistoryField === f.id ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant')}>
+                          {f.name} ({f.count})
+                        </button>
+                      ))}
                     </div>
-                    <button onClick={() => handleDeleteHistory(entry)} className="text-outline hover:text-red-500 transition-colors p-1">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  {entry.summary && (
-                    <p className="text-xs text-on-surface-variant italic border-l-2 border-primary/30 pl-3">{entry.summary}</p>
-                  )}
-                  <div className="space-y-2">
-                    {entry.results.map((crop, i) => (
-                      <div key={i} className="flex items-center justify-between bg-surface-container-low rounded-2xl px-4 py-3">
-                        <div>
-                          <p className="font-bold text-sm">#{i + 1} {crop.cropName}</p>
-                          {crop.reasons?.[0] && <p className="text-xs text-on-surface-variant mt-0.5">{crop.reasons[0]}</p>}
+
+                    {/* History entries */}
+                    {filteredHistory.map(entry => (
+                      <div key={entry.id} className="bg-surface-container-lowest rounded-[2rem] p-5 border border-outline-variant/10 shadow-sm space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              <p className="font-black text-lg leading-tight">{entry.field_name}</p>
+                              {entry.generated_at && (
+                                <span className="text-[10px] font-bold bg-surface-container px-2 py-0.5 rounded-full text-on-surface-variant">
+                                  {formatDate(entry.generated_at)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-on-surface-variant mt-0.5">
+                              {entry.field_area && `${entry.field_area} · `}
+                              মাটি: {entry.soil.type} · pH {entry.soil.ph || '?'} · N{entry.soil.n}/P{entry.soil.p}/K{entry.soil.k}
+                            </p>
+                            {entry.weather && (
+                              <p className="text-xs text-on-surface-variant mt-0.5">
+                                📍 {entry.weather.city} · {entry.weather.temp}°C · আর্দ্রতা {entry.weather.humidity}%
+                              </p>
+                            )}
+                          </div>
+                          <button onClick={() => handleDeleteHistory(entry)} className="text-outline hover:text-red-500 transition-colors p-1 shrink-0">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                        <div className="text-right shrink-0 ml-3">
-                          <p className="font-black text-primary text-sm">{crop.suitability}%</p>
-                          <p className="text-xs text-on-surface-variant">{crop.growingSeason}</p>
+
+                        {entry.summary && (
+                          <p className="text-xs text-on-surface-variant italic border-l-2 border-primary/30 pl-3 leading-relaxed">{entry.summary}</p>
+                        )}
+
+                        <div className="space-y-2">
+                          {entry.results.map((crop, i) => (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                const params = new URLSearchParams({ crop: crop.cropName });
+                                if (entry.field_id) params.set('fieldId', entry.field_id);
+                                navigate(`/tools/crops/roadmap?${params.toString()}`);
+                              }}
+                              className="w-full flex items-center justify-between bg-surface-container-low hover:bg-primary/5 rounded-2xl px-4 py-3 transition-colors text-left">
+                              <div className="min-w-0">
+                                <p className="font-bold text-sm">#{i + 1} {crop.cropName}</p>
+                                {crop.growingSeason && <p className="text-xs text-on-surface-variant mt-0.5">🌱 {crop.growingSeason}</p>}
+                                {crop.reasons?.[0] && <p className="text-xs text-on-surface-variant mt-0.5 truncate">{crop.reasons[0]}</p>}
+                              </div>
+                              <div className="text-right shrink-0 ml-3">
+                                <p className="font-black text-primary text-sm">{crop.suitability}%</p>
+                                <p className="text-xs text-on-surface-variant">{crop.expectedYield}</p>
+                              </div>
+                            </button>
+                          ))}
                         </div>
                       </div>
                     ))}
-                  </div>
-                </div>
-              ))}
+                  </>
+                );
+              })()}
             </motion.div>
           )}
 

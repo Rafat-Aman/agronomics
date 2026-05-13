@@ -102,11 +102,11 @@ export default function CropRoadmap() {
         }
         মার্কডাউন ফরম্যাটিং ব্যবহার করবেন না, শুধু JSON স্ট্রিং দিন। কমপক্ষে ৪ থেকে ৫টি স্বতন্ত্র কালানুক্রমিক পর্যায় নিশ্চিত করুন। কাজ, সম্পদ এবং ঝুঁকিগুলো ফসল-নির্দিষ্ট ও একজন কৃষকের জন্য বাস্তবসম্মত করুন।`;
 
-        const response = await client.messages.create({
+        const response = await client.messages.stream({
           model: 'claude-sonnet-4-6',
-          max_tokens: 4096,
+          max_tokens: 8192,
           messages: [{ role: 'user', content: prompt }],
-        });
+        }).finalMessage();
 
         const text = response.content[0].type === 'text' ? response.content[0].text : '';
         const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -158,7 +158,7 @@ export default function CropRoadmap() {
                 <span>আনুমানিক সময়: {data.estimatedTotalDuration}</span>
               </div>
 
-              <button 
+              <button
                 onClick={handleActivate}
                 disabled={syncing || synced}
                 className="mt-6 mx-auto bg-primary text-on-primary px-8 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-primary/30 active:scale-95 transition-all disabled:opacity-70"
